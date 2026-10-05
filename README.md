@@ -1,6 +1,6 @@
 # Cashmire
 
-Socle pédagogique full-stack pour la gestion des dépenses : Svelte/TypeScript, FastAPI, SQLAlchemy et PostgreSQL. À ce stade seule la route `GET /api/health` est implémentée ; l’authentification, les dépenses et les budgets restent à développer.
+Socle pédagogique full-stack pour la gestion des dépenses : Svelte/TypeScript, FastAPI, SQLAlchemy et PostgreSQL. L’API de santé et la création des budgets mensuels sont implémentées. L’authentification et les autres routes métier restent à développer.
 
 ## Prérequis
 
@@ -21,6 +21,8 @@ Compose attend PostgreSQL, exécute `alembic upgrade head` dans le service `migr
 ## Configuration
 
 Les paramètres sont listés dans `.env.example`. Les valeurs sont factices et locales. `JWT_SECRET`, `JWT_EXPIRE_MINUTES` (30 minutes provisoires) et `ALLOWED_ORIGINS` préparent le travail d’authentification, mais ne sont pas encore employés. En production, le cookie JWT devra être `HttpOnly`, `SameSite=Lax` et `Secure`. Selon le contrat API, la déconnexion effacera le cookie sans révoquer le JWT côté serveur avant son expiration.
+
+Tant que l’authentification n’est pas implémentée, `POST /api/budgets` résout un utilisateur fixe côté serveur (`DEV_USER_EMAIL`, par défaut `cashmire-dev@example.invalid`) uniquement dans les environnements `development` et `test`. Le compte est créé à la première requête sans mot de passe utilisable. Le résolveur répond `401` en production et sera remplacé par la lecture du JWT ; aucun identifiant utilisateur n’est accepté dans le corps JSON.
 
 ## Migrations et catégories
 
@@ -60,7 +62,7 @@ docker compose down --volumes
 
 ## Organisation
 
-- `backend/app/routes/` : routes HTTP ; seule la santé existe pour cette étape.
+- `backend/app/routes/` : routes HTTP de santé et création des budgets.
 - `backend/app/models/`, `schemas/`, `services/`, `db/` : modèles, validation, logique et accès DB.
 - `backend/migrations/` : schéma versionné Alembic.
 - `frontend/src/lib/api/` : appels HTTP centralisés ; `components/` : UI réutilisable ; `lib/types/` accueillera les types partagés au besoin.
