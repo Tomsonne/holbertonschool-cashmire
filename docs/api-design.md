@@ -48,10 +48,12 @@ La colonne **Connexion requise** indique si l'utilisateur doit être authentifi�
 ### Authentification
 | Méthode | Route | Connexion requise | Entrée | Sortie | Erreurs |
 |---|---|---|---|---|---|
-| POST | `/api/authentification/inscription` | Non | `{email, mot_de_passe, nom_affichage}` | `201` utilisateur (sans mot de passe) | 409 email déjà pris, 422 email invalide ou mot de passe trop court (< 10) |
+| POST | `/api/authentification/inscription` | Non | `{email, mot_de_passe, nom_affichage}` | `201` utilisateur (sans mot de passe) | 409 email déjà pris, 422 email invalide, mot de passe hors de 10 à 128 caractères ou nom d'affichage hors de 1 à 100 caractères |
 | POST | `/api/authentification/connexion` | Non | `{email, mot_de_passe}` | `200` utilisateur + cookie JWT | 401 identifiants invalides (message identique que l'email existe ou non), 422, 429 |
 | POST | `/api/authentification/deconnexion` | Oui | | `204` + cookie effacé | 401 |
 | GET | `/api/authentification/moi` | Oui | | `200` utilisateur courant | 401 |
+
+**Inscription :** la réponse `201` contient `{id, email, nom_affichage, date_creation}` ; jamais de mot de passe ni de hash. L'email est normalisé (espaces retirés, minuscules) ; l'unicité est insensible à la casse. **L'inscription ne connecte pas l'utilisateur** : aucun cookie ni JWT n'est émis, il faut appeler `/connexion` ensuite. Le mot de passe est haché avec Argon2id.
 
 **Déconnexion avec JWT :** la route efface le cookie du navigateur. Le JWT étant sans état, le serveur **n'invalide pas** le jeton : il reste valable jusqu'à son expiration. Pour limiter ce risque, sa durée de vie est courte. C'est une limite connue du MVP, à rappeler dans le README.
 
@@ -114,4 +116,4 @@ Les filtres se combinent. Le tri est toujours par `date_depense` décroissante. 
 - Les routes qui modifient l'état sont protégées contre le CSRF (SameSite + vérification de l'origine).
 - Le JWT n'est pas révocable côté serveur : la sécurité repose sur son expiration courte et sur le cookie `HttpOnly`.
 
-> **Task 0 :** seule `GET /api/health` est implémentée. Le reste est la conception pour les tâches suivantes.
+> **Implémentation :** seules `GET /api/health` et `POST /api/authentification/inscription` sont implémentées. Le reste est la conception pour les tâches suivantes.
