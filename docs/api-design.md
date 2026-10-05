@@ -54,6 +54,17 @@ Les catégories sont prédéfinies, communes à tous et en lecture seule : il n'
 | PATCH | `/api/depenses/{id}` | Oui | champs à modifier | `200` dépense modifiée | 401, 404, 422 |
 | DELETE | `/api/depenses/{id}` | Oui | | `204` | 401, 404 |
 
+**Paramètres de `GET /api/depenses` :**
+
+| Paramètre | Type | Défaut | Règle |
+|---|---|---|---|
+| `mois` | `AAAA-MM` | aucun | Filtre sur `date_depense`. Sans ce paramètre, **toutes** les dépenses de l'utilisateur sont renvoyées. Format invalide : 422. |
+| `categorie_id` | UUID | aucun | Filtre sur une catégorie. UUID mal formé : 422. |
+| `limite` | entier | `20` | Entre 1 et **100**. Hors de cet intervalle : 422. |
+| `decalage` | entier | `0` | Supérieur ou égal à 0. Valeur négative : 422. |
+
+Les filtres se combinent. Le tri est toujours par `date_depense` décroissante. `total` est le nombre de dépenses correspondant aux filtres, calculé **avant** la pagination : il ne dépend ni de `limite` ni de `decalage`. Une liste vide renvoie `200 {"elements": [], "total": 0}`.
+
 ### Budgets
 | Méthode | Route | Connexion requise | Entrée | Sortie | Erreurs |
 |---|---|---|---|---|---|
