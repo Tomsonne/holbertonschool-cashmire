@@ -24,7 +24,7 @@ Seule exception de langue : `/api/health`, nom conventionnel des routes de super
 | 500 | `erreur_interne` | Erreur serveur, message générique |
 
 ### Lever une erreur dans une route
-Les routes lèvent `ErreurApi` (`app/core/erreurs.py`) ; le `code` est déduit du statut.
+Les routes lèvent `ErreurApi` (`app/core/erreurs.py`) ; le `code` est déduit du statut. **`ErreurApi` est réservée aux statuts 4xx** (le message est renvoyé tel quel au client) : un autre statut lève une `ValueError`, et l'erreur 500 est alors gérée par le gestionnaire générique. Une erreur 500 ne se lève jamais à la main.
 ```python
 from app.core.erreurs import ErreurApi
 

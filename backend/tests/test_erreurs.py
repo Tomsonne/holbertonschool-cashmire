@@ -43,6 +43,11 @@ def creer_app_de_test() -> FastAPI:
     def boom():
         raise RuntimeError("SELECT * FROM utilisateurs WHERE mot_de_passe_hache = 'x'")
 
+    @app.get("/fuite")
+    def fuite():
+        # Mauvais usage volontaire : un développeur lève une 500 avec un détail interne.
+        raise ErreurApi(500, "SELECT * FROM utilisateurs WHERE mot_de_passe_hache = 'x'")
+
     return app
 
 
@@ -143,3 +148,27 @@ def test_route_inconnue_de_l_application_renvoie_404_au_format_commun():
     reponse = TestClient(app_cashmire).get("/api/n-existe-pas")
     assert reponse.status_code == 404
     assert reponse.json() == {"erreur": {"code": "introuvable", "message": "Ressource introuvable."}}
+
+
+# --- ErreurApi est réservée aux statuts 4xx ------------------------------------------------
+
+
+@pytest.mark.parametrize("statut", [200, 302, 399, 500, 503, 600])
+def test_erreur_api_refuse_les_statuts_hors_4xx(statut):
+    with pytest.raises(ValueError):
+        ErreurApi(statut, "Message de test.")
+
+
+@pytest.mark.parametrize("statut", [400, 499])
+def test_erreur_api_accepte_les_bornes_4xx(statut):
+    assert ErreurApi(statut, "Message de test.").statut == statut
+
+
+def test_erreur_api_500_avec_detail_sql_ne_fuit_pas_vers_le_client(client):
+    reponse = client.get("/fuite")
+    assert reponse.status_code == 500
+    assert reponse.json() == {
+        "erreur": {"code": "erreur_interne", "message": "Une erreur interne est survenue."}
+    }
+    for fuite in ("SELECT", "utilisateurs", "mot_de_passe_hache"):
+        assert fuite not in reponse.text

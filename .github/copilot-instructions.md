@@ -9,7 +9,7 @@ Lire `docs/api-design.md`, `docs/data-model.md` et `docs/architecture.md` avant 
 - Python 3.12, FastAPI, SQLAlchemy 2, psycopg 3, Alembic ; Svelte 5, Vite, TypeScript.
 - Tables et champs API en français ; noms techniques sans accents.
 - Argent : `Decimal` et `NUMERIC(12,2)`, jamais `float`. Dans les schémas Pydantic, utiliser `Montant` ou `MontantPositif` (`app/schemas/montant.py`) et toujours déclarer un `response_model` : sans schéma de réponse, FastAPI renvoie un nombre JSON (`12.5`) au lieu de la chaîne `"12.50"`.
-- Erreurs : lever `ErreurApi` (`app/core/erreurs.py`), ne jamais construire une réponse d'erreur à la main ; les gestionnaires garantissent le format `{erreur: {code, message, champs?}}`.
+- Erreurs : lever `ErreurApi` (`app/core/erreurs.py`) pour les statuts 4xx uniquement, ne jamais construire une réponse d'erreur à la main ; les gestionnaires garantissent le format `{erreur: {code, message, champs?}}`. Les erreurs 500 ne se lèvent jamais à la main : le gestionnaire générique renvoie un message fixe, sans détail SQL ni trace.
 - Toute évolution DB utilise une migration Alembic. Ni `create_all()` ni réinitialisation de schéma au démarrage.
 - Pas de secret réel dans Git, pas de mot de passe en clair, pas de fausse réussite ni de route hors contrat.
 - Toute donnée privée est filtrée par l’utilisateur authentifié. Le JWT ne peut pas être révoqué côté serveur avant expiration dans le MVP défini.
