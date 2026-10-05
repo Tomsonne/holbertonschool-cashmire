@@ -1,7 +1,10 @@
 # Conception de l'API
 
 Base : `/api`. Format : JSON, **champs en français**. Authentification : **JWT** stocké dans un cookie `HttpOnly`, sauf mention contraire.
-Les montants sont des **chaînes décimales** (`"12.50"`) pour éviter toute perte de précision en JavaScript.
+Les montants sont des **chaînes décimales** (`"12.50"`) pour éviter toute perte de précision en JavaScript :
+- **en sortie**, toujours avec deux décimales (`"12.50"`, `"300.00"`, `"-44.60"`), jamais un nombre JSON ;
+- **en entrée**, une chaîne avec 2 décimales au plus et 10 chiffres au plus avant la virgule (comme `NUMERIC(12,2)`) ; un nombre JSON (`12.5`), une valeur à 3 décimales (`"12.345"`) ou trop grande est refusé en `422` au lieu d'être arrondi ou de faire échouer l'insertion en base ;
+- dans le code, les schémas utilisent `Montant` (négatif possible, par exemple un `reste`) ou `MontantPositif` (`app/schemas/montant.py`).
 Seule exception de langue : `/api/health`, nom conventionnel des routes de supervision.
 
 ## Format d'erreur unique
@@ -19,6 +22,20 @@ Seule exception de langue : `/api/health`, nom conventionnel des routes de super
 | 422 | `donnees_invalides` | Données invalides |
 | 429 | `trop_de_tentatives` | Trop de tentatives de connexion |
 | 500 | `erreur_interne` | Erreur serveur, message générique |
+
+### Lever une erreur dans une route
+Les routes lèvent `ErreurApi` (`app/core/erreurs.py`) ; le `code` est déduit du statut.
+```python
+from app.core.erreurs import ErreurApi
+
+raise ErreurApi(404, "Dépense introuvable.")
+raise ErreurApi(409, "Un budget existe déjà ce mois.", champs={"categorie_id": "Déjà budgétée."})
+```
+Les gestionnaires (`app/core/gestionnaires.py`) couvrent aussi les cas suivants, sans code à écrire dans les routes :
+- **Validation Pydantic :** `422 donnees_invalides`, avec `champs` (message français par champ). La valeur envoyée n'est **jamais** renvoyée : sans cela, FastAPI renverrait par exemple le mot de passe saisi.
+- **Corps JSON mal formé :** `400 requete_invalide`.
+- **Route inconnue, méthode non autorisée (404, 405) :** même format, statut conservé ; le code est `introuvable` pour 404 et `requete_invalide` pour les autres statuts non listés.
+- **Exception inattendue :** `500 erreur_interne` avec un message générique ; la trace n'est écrite que dans les journaux du serveur.
 
 ## Routes
 La colonne **Connexion requise** indique si l'utilisateur doit être authentifié (cookie JWT valide). Sans connexion, ces routes répondent `401`.
