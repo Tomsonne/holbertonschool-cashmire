@@ -116,3 +116,11 @@ Le calcul est fait en `Decimal` côté API (jamais en `float`).
 - `depenses (utilisateur_id, date_depense)` : liste par mois.
 - `depenses (utilisateur_id, categorie_id)` : somme par catégorie.
 - L'unicité du budget crée aussi l'index `(utilisateur_id, categorie_id, periode_mois)`.
+
+## Initialisation et décisions en attente
+
+La migration initiale insère les six catégories listées ci-dessus avec des UUID stables. La commande `docker compose exec api python scripts/seed_categories.py` peut être relancée : elle vérifie les noms sans tenir compte de la casse avant toute insertion. Elle ne crée aucun compte de démonstration ni mot de passe.
+
+La durée exacte de vie du JWT reste à décider avec l'équipe. La valeur de configuration initiale de 30 minutes est provisoire. Le contrat précise que le jeton n'est pas révocable côté serveur avant expiration ; la déconnexion efface le cookie uniquement.
+
+Le contrat définit actuellement `attention` pour un pourcentage inférieur ou égal à 100 et `depasse` seulement au-dessus de 100. Confirmer avec l'équipe si une consommation exactement égale à la limite doit plutôt être considérée comme dépassée.
