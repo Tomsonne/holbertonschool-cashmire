@@ -213,3 +213,90 @@ def test_consommation_filtre_utilisateur_categorie_et_mois_et_suit_les_depenses(
     resultat = presenter_budget(db_session, budget, categorie)
     assert resultat.depense == Decimal("0.00")
     assert resultat.pourcentage == Decimal("0.00")
+
+
+def test_liste_budgets_vide(client):
+    reponse = client.get("/api/budgets")
+    assert reponse.status_code == 200
+    assert reponse.json() == []
+
+
+def test_liste_filtre_mois_et_detail_avec_consommation_actualisee(client, db_session):
+    categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    autre_categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Transport"))
+    octobre = client.post("/api/budgets", json={
+        "categorie_id": str(categorie.id), "montant_limite": "100.00", "mois": "2026-10"
+    }).json()
+    novembre = client.post("/api/budgets", json={
+        "categorie_id": str(autre_categorie.id), "montant_limite": "50.00", "mois": "2026-11"
+    }).json()
+    budget = db_session.get(Budget, octobre["id"])
+    depense = Depense(
+        utilisateur_id=budget.utilisateur_id, categorie_id=categorie.id,
+        montant=Decimal("80.00"), date_depense=date(2026, 10, 12), libelle="Test",
+    )
+    db_session.add(depense)
+    db_session.flush()
+
+    liste = client.get("/api/budgets")
+    assert liste.status_code == 200
+    assert {element["id"] for element in liste.json()} == {octobre["id"], novembre["id"]}
+    filtre = client.get("/api/budgets?mois=2026-10")
+    assert filtre.status_code == 200
+    assert len(filtre.json()) == 1
+    assert filtre.json()[0]["id"] == octobre["id"]
+    assert client.get("/api/budgets?mois=2026-09").json() == []
+
+    detail = client.get(f"/api/budgets/{octobre['id']}")
+    assert detail.status_code == 200
+    assert detail.json() == {
+        "id": octobre["id"], "categorie": {"id": str(categorie.id), "nom": categorie.nom},
+        "mois": "2026-10", "montant_limite": "100.00", "depense": "80.00",
+        "reste": "20.00", "pourcentage": 80.0, "seuil_alerte_pct": 80,
+        "statut": "attention",
+    }
+    assert client.get(f"/api/budgets/{novembre['id']}").json()["depense"] == "0.00"
+
+    depense.montant = Decimal("110.00")
+    db_session.flush()
+    actualise = client.get(f"/api/budgets/{octobre['id']}").json()
+    assert (actualise["depense"], actualise["reste"], actualise["statut"]) == (
+        "110.00", "-10.00", "depasse"
+    )
+    db_session.delete(depense)
+    db_session.flush()
+    assert client.get(f"/api/budgets/{octobre['id']}").json()["depense"] == "0.00"
+
+
+def test_consultation_isole_les_budgets_par_utilisateur(client, db_session):
+    categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    autre_utilisateur = Utilisateur(
+        email=f"etranger-{uuid4()}@example.invalid", mot_de_passe_hache="inutilisable", nom_affichage="Autre"
+    )
+    db_session.add(autre_utilisateur)
+    db_session.flush()
+    budget_etranger = Budget(
+        utilisateur_id=autre_utilisateur.id, categorie_id=categorie.id,
+        montant_limite=Decimal("100.00"), periode_mois=date(2026, 10, 1), seuil_alerte_pct=80,
+    )
+    db_session.add(budget_etranger)
+    db_session.flush()
+
+    assert client.get("/api/budgets").json() == []
+    for budget_id in (budget_etranger.id, uuid4()):
+        reponse = client.get(f"/api/budgets/{budget_id}")
+        assert reponse.status_code == 404
+        assert reponse.json()["erreur"]["code"] == "introuvable"
+
+
+@pytest.mark.parametrize("mois", ["2026-2", "2026-13", "0000-01", "2026-02-01", "xyz"])
+def test_filtre_mois_invalide_repond_422(client, mois):
+    reponse = client.get("/api/budgets", params={"mois": mois})
+    assert reponse.status_code == 422
+    assert reponse.json()["erreur"]["code"] == "donnees_invalides"
+
+
+def test_identifiant_budget_invalide_repond_422(client):
+    reponse = client.get("/api/budgets/pas-un-uuid")
+    assert reponse.status_code == 422
+    assert reponse.json()["erreur"]["code"] == "donnees_invalides"

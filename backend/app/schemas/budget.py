@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from app.schemas.montant import Montant, MontantPositif
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 
 class BudgetCreation(BaseModel):
@@ -30,6 +30,9 @@ class BudgetCreation(BaseModel):
     @property
     def periode_mois(self) -> date:
         return date.fromisoformat(f"{self.mois}-01")
+
+
+MoisBudget = Annotated[str, AfterValidator(BudgetCreation.mois_valide)]
 
 
 class CategorieResume(BaseModel):
