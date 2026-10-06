@@ -3,11 +3,12 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.erreurs import ErreurApi
 from app.db.session import engine, get_db
 from app.main import app
 from app.models.budget import Budget
@@ -99,9 +100,9 @@ def test_requetes_simultanees_ne_creent_qu_un_budget(base_propre):
 def test_resolveur_utilisateur_de_test_est_interdit_en_production(db_session, monkeypatch):
     from app.core import config
     monkeypatch.setattr(config.settings, "environment", "production")
-    with pytest.raises(HTTPException) as erreur:
+    with pytest.raises(ErreurApi) as erreur:
         resoudre_utilisateur_courant(db_session)
-    assert erreur.value.status_code == 401
+    assert erreur.value.statut == 401
 
 
 def test_route_repond_401_formate_en_production(client, monkeypatch):
@@ -112,3 +113,28 @@ def test_route_repond_401_formate_en_production(client, monkeypatch):
     })
     assert response.status_code == 401
     assert response.json()["erreur"]["code"] == "non_authentifie"
+
+
+def test_erreur_bdd_inconnue_est_relancee_apres_rollback(client, db_session, monkeypatch):
+    categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    rollback_original = db_session.rollback
+    rollbacks = []
+
+    def rollback_verifie():
+        rollbacks.append(True)
+        rollback_original()
+
+    def commit_invalide():
+        raise IntegrityError("INSERT budgets", {}, Exception("contrainte inconnue"))
+
+    monkeypatch.setattr(db_session, "rollback", rollback_verifie)
+    monkeypatch.setattr(db_session, "commit", commit_invalide)
+    reponse = client.post("/api/budgets", json={
+        "categorie_id": str(categorie.id), "montant_limite": "10.00", "mois": "2026-10"
+    })
+    assert reponse.status_code == 500
+    assert reponse.json() == {
+        "erreur": {"code": "erreur_interne", "message": "Une erreur interne est survenue."}
+    }
+    assert rollbacks == [True]
+    assert "contrainte inconnue" not in reponse.text
