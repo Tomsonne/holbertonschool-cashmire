@@ -25,8 +25,9 @@ def presenter_budget(session: Session, budget: Budget, categorie: Categorie) -> 
     )
     depense = Decimal(total or 0).quantize(Decimal("0.01"))
     limite = budget.montant_limite
-    pourcentage = (depense * Decimal(100) / limite).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    statut = "depasse" if depense > limite else "attention" if pourcentage >= budget.seuil_alerte_pct else "ok"
+    pourcentage_exact = depense * Decimal(100) / limite
+    pourcentage = pourcentage_exact.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    statut = "depasse" if depense > limite else "attention" if pourcentage_exact >= budget.seuil_alerte_pct else "ok"
     return BudgetResponse(
         id=budget.id,
         categorie=CategorieResume(id=categorie.id, nom=categorie.nom),

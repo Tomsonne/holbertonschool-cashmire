@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
@@ -13,6 +14,9 @@ from app.db.session import engine, get_db
 from app.main import app
 from app.models.budget import Budget
 from app.models.categorie import Categorie
+from app.models.depense import Depense
+from app.models.utilisateur import Utilisateur
+from app.services.budgets import presenter_budget
 from app.services.utilisateur_courant import resoudre_utilisateur_courant
 
 
@@ -138,3 +142,74 @@ def test_erreur_bdd_inconnue_est_relancee_apres_rollback(client, db_session, mon
     }
     assert rollbacks == [True]
     assert "contrainte inconnue" not in reponse.text
+
+
+@pytest.mark.parametrize(("montant", "pourcentage", "statut", "reste"), [
+    ("799.99", Decimal("80.00"), "ok", "200.01"),
+    ("800.00", Decimal("80.00"), "attention", "200.00"),
+    ("1000.00", Decimal("100.00"), "attention", "0.00"),
+    ("1000.01", Decimal("100.00"), "depasse", "-0.01"),
+])
+def test_consommation_et_statut_aux_bornes(client, db_session, montant, pourcentage, statut, reste):
+    categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    reponse = client.post("/api/budgets", json={
+        "categorie_id": str(categorie.id), "montant_limite": "1000.00", "mois": "2026-10"
+    })
+    assert reponse.status_code == 201
+    budget = db_session.get(Budget, reponse.json()["id"])
+    assert reponse.json()["depense"] == "0.00"
+    assert reponse.json()["reste"] == "1000.00"
+    assert isinstance(reponse.json()["pourcentage"], (int, float))
+    assert Decimal(str(reponse.json()["pourcentage"])) == 0
+    assert reponse.json()["statut"] == "ok"
+
+    db_session.add(Depense(
+        utilisateur_id=budget.utilisateur_id, categorie_id=categorie.id,
+        montant=Decimal(montant), date_depense=date(2026, 10, 15), libelle="Test",
+    ))
+    db_session.flush()
+    resultat = presenter_budget(db_session, budget, categorie)
+    assert resultat.depense == Decimal(montant)
+    assert resultat.reste == Decimal(reste)
+    assert resultat.pourcentage == pourcentage
+    assert resultat.statut == statut
+
+
+def test_consommation_filtre_utilisateur_categorie_et_mois_et_suit_les_depenses(client, db_session):
+    categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    autre_categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Transport"))
+    reponse = client.post("/api/budgets", json={
+        "categorie_id": str(categorie.id), "montant_limite": "100.00", "mois": "2026-12"
+    })
+    assert reponse.status_code == 201
+    budget = db_session.get(Budget, reponse.json()["id"])
+    autre_utilisateur = Utilisateur(
+        email=f"autre-{uuid4()}@example.invalid", mot_de_passe_hache="inutilisable", nom_affichage="Autre"
+    )
+    db_session.add(autre_utilisateur)
+    db_session.flush()
+    depense = Depense(
+        utilisateur_id=budget.utilisateur_id, categorie_id=categorie.id,
+        montant=Decimal("25.00"), date_depense=date(2026, 12, 31), libelle="Incluse",
+    )
+    db_session.add_all([
+        depense,
+        Depense(utilisateur_id=budget.utilisateur_id, categorie_id=autre_categorie.id,
+                montant=Decimal("12.00"), date_depense=date(2026, 12, 15), libelle="Autre catégorie"),
+        Depense(utilisateur_id=budget.utilisateur_id, categorie_id=categorie.id,
+                montant=Decimal("13.00"), date_depense=date(2027, 1, 1), libelle="Autre mois"),
+        Depense(utilisateur_id=autre_utilisateur.id, categorie_id=categorie.id,
+                montant=Decimal("14.00"), date_depense=date(2026, 12, 15), libelle="Autre utilisateur"),
+    ])
+    db_session.flush()
+    assert presenter_budget(db_session, budget, categorie).depense == Decimal("25.00")
+
+    depense.montant = Decimal("30.00")
+    db_session.flush()
+    assert presenter_budget(db_session, budget, categorie).depense == Decimal("30.00")
+
+    db_session.delete(depense)
+    db_session.flush()
+    resultat = presenter_budget(db_session, budget, categorie)
+    assert resultat.depense == Decimal("0.00")
+    assert resultat.pourcentage == Decimal("0.00")

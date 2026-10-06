@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from app.schemas.montant import Montant, MontantPositif
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 
 class BudgetCreation(BaseModel):
@@ -47,3 +47,7 @@ class BudgetResponse(BaseModel):
     pourcentage: Decimal
     seuil_alerte_pct: int
     statut: str
+
+    @field_serializer("pourcentage")
+    def serialiser_pourcentage(self, value: Decimal) -> float:
+        return float(value)
