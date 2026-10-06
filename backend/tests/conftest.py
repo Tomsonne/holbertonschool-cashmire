@@ -33,7 +33,13 @@ _verifier_url_de_test(URL_DE_TEST)
 # L'application construit son moteur à l'import de app.db.session, à partir de DATABASE_URL :
 # on la redirige vers la base de test AVANT d'importer l'application.
 os.environ["DATABASE_URL"] = URL_DE_TEST
+# Réglages déterministes, indépendants de l'environnement de la machine. Affectation directe
+# (pas setdefault) : Settings() est construit à l'import de l'application et exige JWT_SECRET.
+os.environ["JWT_SECRET"] = "cle-de-test-uniquement-0123456789-abcdef"
+os.environ["JWT_EXPIRE_MINUTES"] = "30"
+os.environ["ENVIRONMENT"] = "development"
 
+from app.core import limiteur  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -41,6 +47,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 # Tables vidées entre deux tests. `categories` n'en fait pas partie : elle est remplie par la
 # migration initiale. CASCADE vide aussi depenses et budgets (clés étrangères vers utilisateurs).
 TABLES_A_VIDER = "utilisateurs"
+
+
+@pytest.fixture(autouse=True)
+def limiteur_a_zero() -> Iterator[None]:
+    """Le compteur de tentatives est global au processus : on le vide avant chaque test."""
+    limiteur.reinitialiser_tout()
+    yield
 
 
 @pytest.fixture(scope="session")

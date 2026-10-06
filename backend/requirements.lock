@@ -68,6 +68,8 @@ pydantic-core==2.46.5
     # via pydantic
 pydantic-settings==2.8.1
     # via -r requirements.txt
+pyjwt==2.10.1
+    # via -r requirements.txt
 pytest==8.3.5
     # via -r requirements.txt
 python-dotenv==1.2.4

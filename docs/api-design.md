@@ -49,11 +49,17 @@ La colonne **Connexion requise** indique si l'utilisateur doit être authentifi�
 | Méthode | Route | Connexion requise | Entrée | Sortie | Erreurs |
 |---|---|---|---|---|---|
 | POST | `/api/authentification/inscription` | Non | `{email, mot_de_passe, nom_affichage}` | `201` utilisateur (sans mot de passe) | 409 email déjà pris, 422 email invalide, mot de passe hors de 10 à 128 caractères ou nom d'affichage hors de 1 à 100 caractères |
-| POST | `/api/authentification/connexion` | Non | `{email, mot_de_passe}` | `200` utilisateur + cookie JWT | 401 identifiants invalides (message identique que l'email existe ou non), 422, 429 |
+| POST | `/api/authentification/connexion` | Non | `{email, mot_de_passe}` | `200` utilisateur `{id, email, nom_affichage, date_creation}` + cookie JWT `access_token` | 401 identifiants invalides (message identique que l'email existe ou non), 422 email invalide, mot de passe de plus de 128 caractères ou champ manquant, 429 trop de tentatives |
 | POST | `/api/authentification/deconnexion` | Oui | | `204` + cookie effacé | 401 |
-| GET | `/api/authentification/moi` | Oui | | `200` utilisateur courant | 401 |
+| GET | `/api/authentification/moi` | Oui | | `200` utilisateur courant `{id, email, nom_affichage, date_creation}` (sans mot de passe) | 401 |
 
 **Inscription :** la réponse `201` contient `{id, email, nom_affichage, date_creation}` ; jamais de mot de passe ni de hash. L'email est normalisé (espaces retirés, minuscules) ; l'unicité est insensible à la casse. **L'inscription ne connecte pas l'utilisateur** : aucun cookie ni JWT n'est émis, il faut appeler `/connexion` ensuite. Le mot de passe est haché avec Argon2id.
+
+**Connexion :** l'email est normalisé comme à l'inscription. Le mot de passe n'a **aucun minimum** ni règle de composition (la politique de 10 à 128 caractères ne vaut qu'à l'inscription) : seul le maximum de 128 caractères est contrôlé (`422` au-delà). Un mot de passe de 9 caractères est donc simplement incorrect : `401`, pas `422`. Il n'est jamais nettoyé ni tronqué.
+- **Cookie :** `access_token`, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age` de 30 minutes, `Secure` seulement en production. Le jeton n'apparaît jamais dans le corps JSON. Le JWT (HS256) contient `sub` (identifiant de l'utilisateur), `iat` et `exp`. Durée de vie : **30 minutes, sans refresh token** (`JWT_EXPIRE_MINUTES`, strictement positif) ; la même valeur fixe `exp` et `Max-Age`.
+- **`401` :** `{"erreur": {"code": "non_authentifie", "message": "Email ou mot de passe incorrect."}}`, sans `champs`, identique pour un email inconnu et un mauvais mot de passe. Un email inconnu déclenche quand même une vérification Argon2 (contre un hash factice) pour ne pas se distinguer par le temps de réponse.
+- **`429` :** après **5 échecs en 15 minutes pour un même email** (normalisé, inconnus compris), toute tentative suivante répond `{"erreur": {"code": "trop_de_tentatives", "message": "Trop de tentatives, réessayez plus tard."}}`, sans `Retry-After`. Le contrôle précède tout calcul Argon2 ; seuls les échecs comptent ; une connexion réussie remet le compteur à zéro. Le compteur est **en mémoire**.
+- **Clé de signature :** `JWT_SECRET` est obligatoire (32 caractères au moins, aucune valeur par défaut), y compris en développement et pour `migrate`, car la configuration est chargée à chaque démarrage.
 
 **Déconnexion avec JWT :** la route efface le cookie du navigateur. Le JWT étant sans état, le serveur **n'invalide pas** le jeton : il reste valable jusqu'à son expiration. Pour limiter ce risque, sa durée de vie est courte. C'est une limite connue du MVP, à rappeler dans le README.
 
@@ -121,7 +127,17 @@ Les filtres se combinent. Le tri est toujours par `date_depense` décroissante. 
 ## Règles transverses
 - Toute requête de lecture ou d'écriture est filtrée par l'utilisateur authentifié (jamais par un `utilisateur_id` envoyé par le client).
 - Cookie de session : `HttpOnly`, `SameSite=Lax`, `Secure` en production.
-- Les routes qui modifient l'état sont protégées contre le CSRF (SameSite + vérification de l'origine).
+- La protection CSRF prévue combine `SameSite=Lax` et la vérification de l'origine ; cette dernière reste à raccorder.
 - Le JWT n'est pas révocable côté serveur : la sécurité repose sur son expiration courte et sur le cookie `HttpOnly`.
 
-> **Implémentation :** seules `GET /api/health` et `POST /api/authentification/inscription` sont implémentées. Le reste est la conception pour les tâches suivantes.
+> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. La déconnexion, les catégories et les dépenses restent à développer. Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).
+>
+> **Dépendance `utilisateur_courant` (issue #9) :** `app/core/authentification.py` lit uniquement le cookie `access_token` (jamais l'en-tête `Authorization`), vérifie signature et expiration (HS256 imposé côté serveur ; `exp` et `sub` obligatoires), convertit `sub` en UUID, puis charge l'utilisateur par une requête SQL (jamais depuis la mémoire de la session). Toute route privée l'utilise via `Depends(utilisateur_courant)`. Tous les échecs (cookie absent ou vide, jeton illisible, mauvaise clé, expiré, mauvais algorithme, `exp` ou `sub` absent, `sub` non UUID, utilisateur inexistant) renvoient la **même** `401` : `{"erreur": {"code": "non_authentifie", "message": "Authentification requise."}}`, sans `champs`. Le JWT n'est **pas révocable** avant son expiration : un jeton reste accepté tant que l'utilisateur existe et que `exp` n'est pas dépassé.
+
+## Limites connues (connexion, issue #8)
+- Le compteur de tentatives est **par worker uvicorn** et disparaît au redémarrage.
+- Un attaquant qui connaît un email peut **bloquer temporairement** la connexion de ce compte (5 échecs suffisent pendant 15 minutes).
+- Le JWT **n'est pas révocable** avant son expiration (30 minutes).
+- La protection CSRF par vérification de l'origine **n'est pas traitée dans #8** ; seul `SameSite=Lax` s'applique pour l'instant.
+- Deux requêtes simultanées sur un même email peuvent passer avant l'enregistrement d'un échec
+- La mémoire du limiteur n'a pas de borne dure

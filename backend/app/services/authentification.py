@@ -1,12 +1,22 @@
+import secrets
+from datetime import datetime, timedelta, timezone
+
+import jwt
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import limiteur
+from app.core.config import settings
 from app.core.erreurs import ErreurApi
-from app.core.securite import hacher_mot_de_passe
+from app.core.securite import hacher_mot_de_passe, verifier_mot_de_passe
 from app.models.utilisateur import Utilisateur
-from app.schemas.utilisateur import InscriptionEntree
+from app.schemas.utilisateur import ConnexionEntree, InscriptionEntree
 
 CONTRAINTE_EMAIL_UNIQUE = "uq_utilisateurs_email_insensible"
+
+# Hash factice, généré une seule fois : un email inconnu coûte autant d'Argon2 qu'un email connu.
+_HASH_FACTICE = hacher_mot_de_passe(secrets.token_urlsafe(32))
 
 
 def _est_doublon_email(erreur: IntegrityError) -> bool:
@@ -38,3 +48,29 @@ def inscrire(db: Session, donnees: InscriptionEntree) -> Utilisateur:
         ) from None
     db.refresh(utilisateur)  # charge date_creation (valeur par défaut posée par la base)
     return utilisateur
+
+
+def _creer_jwt(utilisateur: Utilisateur) -> str:
+    maintenant = datetime.now(timezone.utc)
+    claims = {
+        "sub": str(utilisateur.id),
+        "iat": maintenant,
+        "exp": maintenant + timedelta(minutes=settings.jwt_expire_minutes),
+    }
+    return jwt.encode(claims, settings.jwt_secret, algorithm="HS256")
+
+
+def connecter(db: Session, donnees: ConnexionEntree) -> tuple[Utilisateur, str]:
+    """Vérifie les identifiants et renvoie l'utilisateur et son JWT (à poser en cookie)."""
+    # Avant tout travail Argon2 : un compte bloqué ne coûte rien au serveur.
+    limiteur.verifier_autorise(donnees.email)
+    utilisateur = db.scalars(
+        select(Utilisateur).where(func.lower(Utilisateur.email) == donnees.email)
+    ).one_or_none()
+    hache = utilisateur.mot_de_passe_hache if utilisateur else _HASH_FACTICE
+    mot_de_passe_valide = verifier_mot_de_passe(hache, donnees.mot_de_passe)
+    if utilisateur is None or not mot_de_passe_valide:
+        limiteur.enregistrer_echec(donnees.email)
+        raise ErreurApi(401, "Email ou mot de passe incorrect.")
+    limiteur.reinitialiser(donnees.email)
+    return utilisateur, _creer_jwt(utilisateur)
