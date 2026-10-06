@@ -51,7 +51,7 @@ La colonne **Connexion requise** indique si l'utilisateur doit être authentifi�
 | POST | `/api/authentification/inscription` | Non | `{email, mot_de_passe, nom_affichage}` | `201` utilisateur (sans mot de passe) | 409 email déjà pris, 422 email invalide, mot de passe hors de 10 à 128 caractères ou nom d'affichage hors de 1 à 100 caractères |
 | POST | `/api/authentification/connexion` | Non | `{email, mot_de_passe}` | `200` utilisateur `{id, email, nom_affichage, date_creation}` + cookie JWT `access_token` | 401 identifiants invalides (message identique que l'email existe ou non), 422 email invalide, mot de passe de plus de 128 caractères ou champ manquant, 429 trop de tentatives |
 | POST | `/api/authentification/deconnexion` | Oui | | `204` + cookie effacé | 401 |
-| GET | `/api/authentification/moi` | Oui | | `200` utilisateur courant | 401 |
+| GET | `/api/authentification/moi` | Oui | | `200` utilisateur courant `{id, email, nom_affichage, date_creation}` (sans mot de passe) | 401 |
 
 **Inscription :** la réponse `201` contient `{id, email, nom_affichage, date_creation}` ; jamais de mot de passe ni de hash. L'email est normalisé (espaces retirés, minuscules) ; l'unicité est insensible à la casse. **L'inscription ne connecte pas l'utilisateur** : aucun cookie ni JWT n'est émis, il faut appeler `/connexion` ensuite. Le mot de passe est haché avec Argon2id.
 
@@ -122,7 +122,9 @@ Les filtres se combinent. Le tri est toujours par `date_depense` décroissante. 
 - Les routes qui modifient l'état sont protégées contre le CSRF (SameSite + vérification de l'origine).
 - Le JWT n'est pas révocable côté serveur : la sécurité repose sur son expiration courte et sur le cookie `HttpOnly`.
 
-> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription` et `POST /api/authentification/connexion` sont implémentées. Le reste (déconnexion, `moi`, catégories, dépenses, budgets) est la conception pour les tâches suivantes.
+> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion` et `GET /api/authentification/moi` sont implémentées. Le reste (déconnexion, catégories, dépenses, budgets) est la conception pour les tâches suivantes.
+>
+> **Dépendance `utilisateur_courant` (issue #9) :** `app/core/authentification.py` lit uniquement le cookie `access_token` (jamais l'en-tête `Authorization`), vérifie signature et expiration (HS256 imposé côté serveur ; `exp` et `sub` obligatoires), convertit `sub` en UUID, puis charge l'utilisateur par une requête SQL (jamais depuis la mémoire de la session). Toute route privée l'utilise via `Depends(utilisateur_courant)`. Tous les échecs (cookie absent ou vide, jeton illisible, mauvaise clé, expiré, mauvais algorithme, `exp` ou `sub` absent, `sub` non UUID, utilisateur inexistant) renvoient la **même** `401` : `{"erreur": {"code": "non_authentifie", "message": "Authentification requise."}}`, sans `champs`. Le JWT n'est **pas révocable** avant son expiration : un jeton reste accepté tant que l'utilisateur existe et que `exp` n'est pas dépassé.
 
 ## Limites connues (connexion, issue #8)
 - Le compteur de tentatives est **par worker uvicorn** et disparaît au redémarrage.

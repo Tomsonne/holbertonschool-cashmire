@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
+from app.core.authentification import utilisateur_courant
 from app.core.config import settings
 from app.core.securite import NOM_COOKIE_JWT
 from app.db.session import get_db
+from app.models.utilisateur import Utilisateur
 from app.schemas.utilisateur import ConnexionEntree, InscriptionEntree, UtilisateurSortie
 from app.services.authentification import connecter, inscrire
 
@@ -31,4 +33,9 @@ def connexion(
         samesite="lax",
         secure=settings.environment == "production",
     )
+    return utilisateur
+
+
+@router.get("/moi", response_model=UtilisateurSortie)
+def moi(utilisateur: Utilisateur = Depends(utilisateur_courant)) -> Utilisateur:
     return utilisateur
