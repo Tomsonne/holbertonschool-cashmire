@@ -6,6 +6,13 @@ from email_validator import validate_email
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 
+def normaliser_email(valeur: str) -> str:
+    """Espaces retirés, minuscules, syntaxe vérifiée (partagé par l'inscription et la connexion)."""
+    # Un EmailNotValidError est un ValueError : Pydantic le convertit en erreur 422.
+    valide = validate_email(valeur.strip().lower(), check_deliverability=False)
+    return valide.normalized.lower()
+
+
 class InscriptionEntree(BaseModel):
     email: str
     # Le mot de passe n'est ni nettoyé ni tronqué : les espaces font partie du secret.
@@ -14,10 +21,20 @@ class InscriptionEntree(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def normaliser_email(cls, valeur: str) -> str:
-        # Un EmailNotValidError est un ValueError : Pydantic le convertit en erreur 422.
-        valide = validate_email(valeur.strip().lower(), check_deliverability=False)
-        return valide.normalized.lower()
+    def _normaliser_email(cls, valeur: str) -> str:
+        return normaliser_email(valeur)
+
+
+class ConnexionEntree(BaseModel):
+    email: str
+    # Ni minimum ni règle de composition (la politique de l'inscription ne s'applique pas ici),
+    # et jamais nettoyé ni tronqué. Le maximum borne seulement le coût du hachage.
+    mot_de_passe: str = Field(max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def _normaliser_email(cls, valeur: str) -> str:
+        return normaliser_email(valeur)
 
 
 class UtilisateurSortie(BaseModel):
