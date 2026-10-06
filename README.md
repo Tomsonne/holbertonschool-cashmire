@@ -22,7 +22,7 @@ Compose attend PostgreSQL, exécute `alembic upgrade head` dans le service `migr
 
 Les paramètres sont listés dans `.env.example`. Les valeurs sont factices et locales. `JWT_SECRET` est obligatoire et doit contenir au moins 32 caractères, y compris en développement et lors des migrations. `JWT_EXPIRE_MINUTES` doit être positif ; sa valeur par défaut est de 30 minutes. `ALLOWED_ORIGINS` reste à raccorder à la protection par origine. En production, le cookie JWT devra être `HttpOnly`, `SameSite=Lax` et `Secure`. Selon le contrat API, la déconnexion effacera le cookie sans révoquer le JWT côté serveur avant son expiration.
 
-Tant que les budgets ne sont pas raccordés à l’utilisateur connecté (#9), leurs routes utilisent un compte provisoire côté serveur (`DEV_USER_EMAIL`, par défaut `cashmire-dev@example.invalid`) uniquement dans les environnements `development` et `test`. La connexion existe, mais elle ne détermine pas encore le propriétaire des budgets. Le compte provisoire est créé à la première requête sans mot de passe utilisable. Le résolveur répond `401` en production et sera remplacé par la lecture du JWT ; aucun identifiant utilisateur n’est accepté dans le corps JSON.
+Les cinq routes budgets utilisent l’utilisateur authentifié par le cookie JWT via `utilisateur_courant`. Chaque lecture et modification est limitée à ses budgets ; un budget appartenant à un autre utilisateur répond `404`. Sans cookie valide, la réponse est `401`. Aucun identifiant utilisateur n’est accepté dans le corps JSON.
 
 ## Migrations et catégories
 
@@ -39,13 +39,14 @@ Pour appliquer les migrations manuellement : `docker compose run --rm migrate`.
 Les tests backend exigent `TEST_DATABASE_URL`, qui doit viser une base dédiée dont le nom se termine par `_test`. Créez cette base, puis appliquez-y les migrations avant de lancer les tests. Ils vident les données de cette base entre les cas de test (les catégories issues de la migration sont conservées). Avec les identifiants de `.env.example`, depuis la racine du projet :
 
 ```sh
-docker compose up -d db
+docker compose up -d --wait db
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d postgres -c "CREATE DATABASE cashmire_test;"'
+docker compose build api migrate
 docker compose run --rm -e DATABASE_URL=postgresql+psycopg://cashmire:local-only-change-me@db:5432/cashmire_test migrate
-docker compose run --rm --no-deps -v "$PWD/backend/tests:/app/tests:ro" -e TEST_DATABASE_URL=postgresql+psycopg://cashmire:local-only-change-me@db:5432/cashmire_test -e ENVIRONMENT=test api pytest -p no:cacheprovider
+docker compose run --rm --no-deps -v "$PWD/backend/tests:/app/tests:ro" -e TEST_DATABASE_URL=postgresql+psycopg://cashmire:local-only-change-me@db:5432/cashmire_test api pytest -p no:cacheprovider
 ```
 
-La création de la base ne se fait qu’une fois. Si les identifiants PostgreSQL de `.env` diffèrent, adaptez les deux URL. L’image backend ne contient pas les tests : la commande les monte en lecture seule.
+La création de la base ne se fait qu’une fois ; lors des exécutions suivantes, sautez cette ligne. Si les identifiants PostgreSQL de `.env` diffèrent, adaptez les deux URL. L’image backend ne contient pas les tests : la commande les monte en lecture seule. La fixture de test fixe `JWT_SECRET` et `ENVIRONMENT` avant de charger l’application.
 
 Pour les contrôles frontend :
 
@@ -71,7 +72,7 @@ docker compose down --volumes
 
 ## Organisation
 
-- `backend/app/routes/` : routes HTTP de santé et gestion des budgets.
+- `backend/app/routes/` : routes HTTP de santé, authentification et gestion des budgets.
 - `backend/app/models/`, `schemas/`, `services/`, `db/` : modèles, validation, logique et accès DB.
 - `backend/migrations/` : schéma versionné Alembic.
 - `frontend/src/lib/api/` : appels HTTP centralisés ; `components/` : UI réutilisable ; `lib/types/` accueillera les types partagés au besoin.

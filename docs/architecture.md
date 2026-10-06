@@ -22,7 +22,7 @@ flowchart LR
 - `app/routes/` expose la santé, l’inscription, la connexion et les routes de création, consultation, modification et suppression des budgets.
 - `app/services/` contient la vérification légère de la DB, les règles métier de l’authentification et des budgets, ainsi que les calculs de consommation des budgets.
 - `migrations/` fait évoluer la base par Alembic. Aucun `create_all()`.
-- `tests/` couvre les réponses nominale et dégradée.
+- `tests/` couvre la santé, l’authentification et les budgets, y compris leurs erreurs et l’isolation des utilisateurs.
 
 ## Frontend
 
@@ -38,8 +38,8 @@ Compose attend `pg_isready`, lance le service ponctuel `migrate`, attend sa réu
 
 ## Points d’extension
 
-- Authentification : routes, schémas et services dédiés, cookie JWT HttpOnly conforme à `docs/api-design.md`.
+- Authentification : inscription, connexion, `/moi` et dépendance `utilisateur_courant` en place ; la déconnexion reste à développer.
 - Dépenses : route, validation, service et tests ; filtrage par utilisateur connecté.
-- Budgets : route et calculs en `Decimal` depuis les dépenses persistées.
+- Budgets : routes et calculs en `Decimal` depuis les dépenses persistées, filtrés par `utilisateur_courant`.
 
-Ce sont des points de départ documentés ; aucun fichier vide ni fonctionnalité future n’est précréé.
+Les autres extensions seront ajoutées au fil des issues.

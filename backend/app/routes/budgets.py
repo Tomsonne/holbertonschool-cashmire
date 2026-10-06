@@ -6,20 +6,24 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.authentification import utilisateur_courant
 from app.core.erreurs import ErreurApi
 from app.db.session import get_db
 from app.models.budget import Budget
 from app.models.categorie import Categorie
+from app.models.utilisateur import Utilisateur
 from app.schemas.budget import BudgetCreation, BudgetModification, BudgetResponse, MoisBudget
 from app.services.budgets import presenter_budget
-from app.services.utilisateur_courant import resoudre_utilisateur_courant
 
 router = APIRouter()
 
 
 @router.get("/budgets", response_model=list[BudgetResponse])
-def lister_budgets(mois: MoisBudget | None = None, session: Session = Depends(get_db)):
-    utilisateur = resoudre_utilisateur_courant(session)
+def lister_budgets(
+    mois: MoisBudget | None = None,
+    session: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(utilisateur_courant),
+):
     requete = (
         select(Budget, Categorie)
         .join(Categorie, Budget.categorie_id == Categorie.id)
@@ -32,8 +36,11 @@ def lister_budgets(mois: MoisBudget | None = None, session: Session = Depends(ge
 
 
 @router.get("/budgets/{budget_id}", response_model=BudgetResponse)
-def obtenir_budget(budget_id: UUID, session: Session = Depends(get_db)):
-    utilisateur = resoudre_utilisateur_courant(session)
+def obtenir_budget(
+    budget_id: UUID,
+    session: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(utilisateur_courant),
+):
     ligne = session.execute(
         select(Budget, Categorie)
         .join(Categorie, Budget.categorie_id == Categorie.id)
@@ -46,8 +53,11 @@ def obtenir_budget(budget_id: UUID, session: Session = Depends(get_db)):
 
 
 @router.post("/budgets", response_model=BudgetResponse, status_code=201)
-def creer_budget(donnees: BudgetCreation, session: Session = Depends(get_db)):
-    utilisateur = resoudre_utilisateur_courant(session)
+def creer_budget(
+    donnees: BudgetCreation,
+    session: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(utilisateur_courant),
+):
     categorie = session.get(Categorie, donnees.categorie_id)
     if categorie is None:
         raise ErreurApi(404, "La catégorie demandée est introuvable.")
@@ -73,8 +83,12 @@ def creer_budget(donnees: BudgetCreation, session: Session = Depends(get_db)):
 
 
 @router.patch("/budgets/{budget_id}", response_model=BudgetResponse)
-def modifier_budget(budget_id: UUID, donnees: BudgetModification, session: Session = Depends(get_db)):
-    utilisateur = resoudre_utilisateur_courant(session)
+def modifier_budget(
+    budget_id: UUID,
+    donnees: BudgetModification,
+    session: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(utilisateur_courant),
+):
     budget = session.scalar(select(Budget).where(Budget.id == budget_id, Budget.utilisateur_id == utilisateur.id))
     if budget is None:
         raise ErreurApi(404, "Budget introuvable.")
@@ -94,8 +108,11 @@ def modifier_budget(budget_id: UUID, donnees: BudgetModification, session: Sessi
 
 
 @router.delete("/budgets/{budget_id}", status_code=204, response_model=None)
-def supprimer_budget(budget_id: UUID, session: Session = Depends(get_db)) -> Response:
-    utilisateur = resoudre_utilisateur_courant(session)
+def supprimer_budget(
+    budget_id: UUID,
+    session: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(utilisateur_courant),
+) -> Response:
     budget = session.scalar(select(Budget).where(Budget.id == budget_id, Budget.utilisateur_id == utilisateur.id))
     if budget is None:
         raise ErreurApi(404, "Budget introuvable.")

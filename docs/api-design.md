@@ -119,7 +119,7 @@ Les filtres se combinent. Le tri est toujours par `date_depense` décroissante. 
 ## Règles transverses
 - Toute requête de lecture ou d'écriture est filtrée par l'utilisateur authentifié (jamais par un `utilisateur_id` envoyé par le client).
 - Cookie de session : `HttpOnly`, `SameSite=Lax`, `Secure` en production.
-- Les routes qui modifient l'état sont protégées contre le CSRF (SameSite + vérification de l'origine).
+- La protection CSRF prévue combine `SameSite=Lax` et la vérification de l'origine ; cette dernière reste à raccorder.
 - Le JWT n'est pas révocable côté serveur : la sécurité repose sur son expiration courte et sur le cookie `HttpOnly`.
 
 > **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. La déconnexion, les catégories et les dépenses restent à développer. Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).

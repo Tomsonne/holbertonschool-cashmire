@@ -1,15 +1,17 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.erreurs import ErreurApi
+from app.core.config import settings
+from app.core.securite import NOM_COOKIE_JWT
 from app.db.session import engine, get_db
 from app.main import app
 from app.models.budget import Budget
@@ -17,10 +19,31 @@ from app.models.categorie import Categorie
 from app.models.depense import Depense
 from app.models.utilisateur import Utilisateur
 from app.services.budgets import presenter_budget
-from app.services.utilisateur_courant import resoudre_utilisateur_courant
 
 
-def test_creer_budget_persiste_et_convertit_le_mois(client, db_session):
+def jeton_pour(utilisateur_id, duree_minutes=30):
+    maintenant = datetime.now(timezone.utc)
+    return jwt.encode(
+        {"sub": str(utilisateur_id), "iat": maintenant, "exp": maintenant + timedelta(minutes=duree_minutes)},
+        settings.jwt_secret,
+        algorithm="HS256",
+    )
+
+
+@pytest.fixture(autouse=True)
+def utilisateur_budget(client, db_session):
+    utilisateur = Utilisateur(
+        email=f"budget-{uuid4()}@example.invalid",
+        mot_de_passe_hache="hash-factice",
+        nom_affichage="Budget",
+    )
+    db_session.add(utilisateur)
+    db_session.commit()
+    client.cookies.set(NOM_COOKIE_JWT, jeton_pour(utilisateur.id))
+    return utilisateur
+
+
+def test_creer_budget_persiste_et_convertit_le_mois(client, db_session, utilisateur_budget):
     categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
     if categorie is None:
         categorie = Categorie(id=uuid4(), nom=f"Test {uuid4()}")
@@ -37,6 +60,7 @@ def test_creer_budget_persiste_et_convertit_le_mois(client, db_session):
     assert response.json()["seuil_alerte_pct"] == 80
 
     budget = db_session.get(Budget, response.json()["id"])
+    assert budget.utilisateur_id == utilisateur_budget.id
     assert budget.periode_mois.isoformat() == "2026-10-01"
     assert budget.montant_limite == Decimal("125.40")
 
@@ -80,7 +104,7 @@ def test_categorie_inconnue_repond_404(client):
     assert response.json()["erreur"]["code"] == "introuvable"
 
 
-def test_requetes_simultanees_ne_creent_qu_un_budget(base_propre):
+def test_requetes_simultanees_ne_creent_qu_un_budget(client, base_propre):
     with Session(engine) as session:
         categorie = session.scalar(select(Categorie).limit(1))
         categorie_id = categorie.id
@@ -92,31 +116,47 @@ def test_requetes_simultanees_ne_creent_qu_un_budget(base_propre):
 
     app.dependency_overrides[get_db] = session_par_requete
     try:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            statuts = list(pool.map(lambda _: TestClient(app).post("/api/budgets", json={
+        jeton = client.cookies.get(NOM_COOKIE_JWT)
+
+        def creer_budget_simultane(_):
+            client_concurrent = TestClient(app)
+            client_concurrent.cookies.set(NOM_COOKIE_JWT, jeton)
+            return client_concurrent.post("/api/budgets", json={
                 "categorie_id": str(categorie_id), "montant_limite": "42.00", "mois": mois
-            }).status_code, range(2)))
+            }).status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            statuts = list(pool.map(creer_budget_simultane, range(2)))
         assert sorted(statuts) == [201, 409]
     finally:
         app.dependency_overrides.pop(get_db, None)
 
 
-def test_resolveur_utilisateur_de_test_est_interdit_en_production(db_session, monkeypatch):
-    from app.core import config
-    monkeypatch.setattr(config.settings, "environment", "production")
-    with pytest.raises(ErreurApi) as erreur:
-        resoudre_utilisateur_courant(db_session)
-    assert erreur.value.statut == 401
+def test_cookie_valide_autorise_les_budgets_en_production(client, monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    assert client.get("/api/budgets").status_code == 200
 
 
-def test_route_repond_401_formate_en_production(client, monkeypatch):
-    from app.core import config
-    monkeypatch.setattr(config.settings, "environment", "production")
-    response = client.post("/api/budgets", json={
-        "categorie_id": str(uuid4()), "montant_limite": "10.00", "mois": "2026-10"
-    })
-    assert response.status_code == 401
-    assert response.json()["erreur"]["code"] == "non_authentifie"
+@pytest.mark.parametrize(("methode", "url", "corps"), [
+    ("GET", "/api/budgets", None),
+    ("POST", "/api/budgets", {
+        "categorie_id": "11111111-1111-4111-8111-111111111111",
+        "montant_limite": "10.00", "mois": "2026-10",
+    }),
+    ("GET", "/api/budgets/11111111-1111-4111-8111-111111111111", None),
+    ("PATCH", "/api/budgets/11111111-1111-4111-8111-111111111111", {"montant_limite": "10.00"}),
+    ("DELETE", "/api/budgets/11111111-1111-4111-8111-111111111111", None),
+])
+@pytest.mark.parametrize("cookie", ["absent", "invalide", "expire"])
+def test_routes_budgets_exigent_un_cookie_valide(client, utilisateur_budget, methode, url, corps, cookie):
+    client.cookies.clear()
+    if cookie == "invalide":
+        client.cookies.set(NOM_COOKIE_JWT, "jeton-invalide")
+    elif cookie == "expire":
+        client.cookies.set(NOM_COOKIE_JWT, jeton_pour(utilisateur_budget.id, duree_minutes=-1))
+    reponse = client.request(methode, url, json=corps)
+    assert reponse.status_code == 401
+    assert reponse.json() == {"erreur": {"code": "non_authentifie", "message": "Authentification requise."}}
 
 
 def test_erreur_bdd_inconnue_est_relancee_apres_rollback(client, db_session, monkeypatch):
