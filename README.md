@@ -1,6 +1,6 @@
 # Cashmire
 
-Socle pédagogique full-stack pour la gestion des dépenses : Svelte/TypeScript, FastAPI, SQLAlchemy et PostgreSQL. L’API de santé, la création et la consultation des budgets mensuels sont implémentées. L’authentification et les autres routes métier restent à développer.
+Socle pédagogique full-stack pour la gestion des dépenses : Svelte/TypeScript, FastAPI, SQLAlchemy et PostgreSQL. L’API de santé et les routes de création, consultation, modification et suppression des budgets mensuels sont implémentées. L’authentification et les autres routes métier restent à développer.
 
 ## Prérequis
 
@@ -62,7 +62,7 @@ docker compose down --volumes
 
 ## Organisation
 
-- `backend/app/routes/` : routes HTTP de santé, création et consultation des budgets.
+- `backend/app/routes/` : routes HTTP de santé et gestion des budgets.
 - `backend/app/models/`, `schemas/`, `services/`, `db/` : modèles, validation, logique et accès DB.
 - `backend/migrations/` : schéma versionné Alembic.
 - `frontend/src/lib/api/` : appels HTTP centralisés ; `components/` : UI réutilisable ; `lib/types/` accueillera les types partagés au besoin.
