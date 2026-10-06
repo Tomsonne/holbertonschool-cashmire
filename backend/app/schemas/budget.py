@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from app.schemas.montant import Montant, MontantPositif
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 
 
 class BudgetCreation(BaseModel):
@@ -33,6 +33,33 @@ class BudgetCreation(BaseModel):
 
 
 MoisBudget = Annotated[str, AfterValidator(BudgetCreation.mois_valide)]
+
+
+class BudgetModification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    montant_limite: MontantPositif | None = None
+    seuil_alerte_pct: Annotated[int, Field(strict=True, ge=1, le=100)] | None = None
+
+    @field_validator("montant_limite", mode="before")
+    @classmethod
+    def montant_non_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("doit être un montant positif")
+        return value
+
+    @field_validator("seuil_alerte_pct", mode="before")
+    @classmethod
+    def seuil_non_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("doit être un entier entre 1 et 100")
+        return value
+
+    @model_validator(mode="after")
+    def au_moins_un_champ(self):
+        if not self.model_fields_set:
+            raise ValueError("au moins un champ doit être fourni")
+        return self
 
 
 class CategorieResume(BaseModel):

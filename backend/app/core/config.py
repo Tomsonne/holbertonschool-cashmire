@@ -5,7 +5,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://cashmire:cashmire@localhost:5432/cashmire"
     environment: str = "development"
-    dev_user_email: str = "cashmire-dev@example.invalid"
     # Aucune valeur par défaut : une clé absente, vide ou trop courte empêche de démarrer,
     # y compris en développement (et aussi pour `alembic`, qui importe ce module).
     jwt_secret: str = Field(min_length=32)
