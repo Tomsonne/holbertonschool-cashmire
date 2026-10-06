@@ -19,8 +19,8 @@ flowchart LR
 - `app/db/` contient la base déclarative, le moteur et les sessions SQLAlchemy.
 - `app/models/` représente les tables PostgreSQL ; les montants Python sont `Decimal`.
 - `app/schemas/` contient les contrats Pydantic.
-- `app/routes/` expose uniquement `GET /api/health`.
-- `app/services/` contient la vérification légère de la DB.
+- `app/routes/` expose la santé, l’inscription, la connexion et les routes de création, consultation, modification et suppression des budgets.
+- `app/services/` contient la vérification légère de la DB, les règles métier de l’authentification et des budgets, ainsi que les calculs de consommation des budgets.
 - `migrations/` fait évoluer la base par Alembic. Aucun `create_all()`.
 - `tests/` couvre les réponses nominale et dégradée.
 
