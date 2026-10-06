@@ -1,9 +1,10 @@
 import re
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
+from app.schemas.montant import Montant, MontantPositif
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -11,28 +12,9 @@ class BudgetCreation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     categorie_id: UUID
-    montant_limite: Decimal
+    montant_limite: MontantPositif
     mois: str
     seuil_alerte_pct: Annotated[int, Field(strict=True, ge=1, le=100)] = 80
-
-    @field_validator("montant_limite", mode="before")
-    @classmethod
-    def montant_decimal_depuis_chaine(cls, value: object) -> Decimal:
-        if not isinstance(value, str):
-            raise ValueError("doit être une chaîne décimale")
-        try:
-            montant = Decimal(value)
-        except (InvalidOperation, ValueError):
-            raise ValueError("doit être un nombre décimal valide") from None
-        if not montant.is_finite():
-            raise ValueError("doit être un nombre décimal fini")
-        if montant <= 0:
-            raise ValueError("doit être supérieur à 0")
-        if montant.as_tuple().exponent < -2:
-            raise ValueError("ne peut pas dépasser deux décimales")
-        if montant >= Decimal("10000000000"):
-            raise ValueError("dépasse la limite autorisée")
-        return montant
 
     @field_validator("mois")
     @classmethod
@@ -59,9 +41,9 @@ class BudgetResponse(BaseModel):
     id: UUID
     categorie: CategorieResume
     mois: str
-    montant_limite: str
-    depense: str
-    reste: str
+    montant_limite: MontantPositif
+    depense: Montant
+    reste: Montant
     pourcentage: Decimal
     seuil_alerte_pct: int
     statut: str

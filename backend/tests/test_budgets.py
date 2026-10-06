@@ -8,41 +8,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.session import engine
+from app.db.session import engine, get_db
 from app.main import app
 from app.models.budget import Budget
 from app.models.categorie import Categorie
-from app.routes.budgets import obtenir_session
 from app.services.utilisateur_courant import resoudre_utilisateur_courant
 
 
-@pytest.fixture
-def session_db():
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = Session(bind=connection, join_transaction_mode="create_savepoint")
-    try:
-        yield session
-    finally:
-        session.close()
-        transaction.rollback()
-        connection.close()
-
-
-@pytest.fixture
-def client(session_db):
-    app.dependency_overrides[obtenir_session] = lambda: session_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
-
-
-def test_creer_budget_persiste_et_convertit_le_mois(client, session_db):
-    categorie = session_db.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+def test_creer_budget_persiste_et_convertit_le_mois(client, db_session):
+    categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
     if categorie is None:
         categorie = Categorie(id=uuid4(), nom=f"Test {uuid4()}")
-        session_db.add(categorie)
-        session_db.flush()
+        db_session.add(categorie)
+        db_session.flush()
 
     response = client.post("/api/budgets", json={
         "categorie_id": str(categorie.id), "montant_limite": "125.40", "mois": "2026-10"
@@ -53,7 +31,7 @@ def test_creer_budget_persiste_et_convertit_le_mois(client, session_db):
     assert response.json()["mois"] == "2026-10"
     assert response.json()["seuil_alerte_pct"] == 80
 
-    budget = session_db.get(Budget, response.json()["id"])
+    budget = db_session.get(Budget, response.json()["id"])
     assert budget.periode_mois.isoformat() == "2026-10-01"
     assert budget.montant_limite == Decimal("125.40")
 
@@ -78,10 +56,10 @@ def test_donnees_invalides_repondent_422(client, payload, champ):
     assert champ in response.json()["erreur"]["champs"]
 
 
-def test_doublon_repond_409(client, session_db):
+def test_doublon_repond_409(client, db_session):
     categorie = Categorie(id=uuid4(), nom=f"Doublon {uuid4()}")
-    session_db.add(categorie)
-    session_db.flush()
+    db_session.add(categorie)
+    db_session.flush()
     corps = {"categorie_id": str(categorie.id), "montant_limite": "60.00", "mois": "2026-11"}
     assert client.post("/api/budgets", json=corps).status_code == 201
     response = client.post("/api/budgets", json=corps)
@@ -97,18 +75,17 @@ def test_categorie_inconnue_repond_404(client):
     assert response.json()["erreur"]["code"] == "introuvable"
 
 
-def test_requetes_simultanees_ne_creent_qu_un_budget():
-    categorie_id = uuid4()
-    mois = "2026-12"
+def test_requetes_simultanees_ne_creent_qu_un_budget(base_propre):
     with Session(engine) as session:
-        session.add(Categorie(id=categorie_id, nom=f"Concurrence {uuid4()}"))
-        session.commit()
+        categorie = session.scalar(select(Categorie).limit(1))
+        categorie_id = categorie.id
+    mois = "2026-12"
 
     def session_par_requete():
         with Session(engine) as session:
             yield session
 
-    app.dependency_overrides[obtenir_session] = session_par_requete
+    app.dependency_overrides[get_db] = session_par_requete
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
             statuts = list(pool.map(lambda _: TestClient(app).post("/api/budgets", json={
@@ -116,18 +93,14 @@ def test_requetes_simultanees_ne_creent_qu_un_budget():
             }).status_code, range(2)))
         assert sorted(statuts) == [201, 409]
     finally:
-        app.dependency_overrides.clear()
-        with Session(engine) as session:
-            session.query(Budget).filter(Budget.categorie_id == categorie_id).delete()
-            session.query(Categorie).filter(Categorie.id == categorie_id).delete()
-            session.commit()
+        app.dependency_overrides.pop(get_db, None)
 
 
-def test_resolveur_utilisateur_de_test_est_interdit_en_production(session_db, monkeypatch):
+def test_resolveur_utilisateur_de_test_est_interdit_en_production(db_session, monkeypatch):
     from app.core import config
     monkeypatch.setattr(config.settings, "environment", "production")
     with pytest.raises(HTTPException) as erreur:
-        resoudre_utilisateur_courant(session_db)
+        resoudre_utilisateur_courant(db_session)
     assert erreur.value.status_code == 401
 
 
