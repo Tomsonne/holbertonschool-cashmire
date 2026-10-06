@@ -28,7 +28,7 @@ contrat sans décision documentée.
 - Pas de `{@html}` Svelte sur des données utilisateur.
 - Ne jamais écrire de mot de passe, de jeton ou de secret dans les logs ni dans les réponses.
 - Ne jamais committer `.env` ; seul `.env.example` est versionné, sans secret réel.
-- Refuser de démarrer si `JWT_SECRET` est vide ou trop court hors développement.
+- Refuser de démarrer si `JWT_SECRET` est vide ou trop court, y compris en développement.
 - Le JWT ne peut pas être révoqué côté serveur avant expiration dans le MVP.
 - En production : cookies `HttpOnly`, `SameSite=Lax`, `Secure`, protection CSRF par origine, secrets injectés à l'exécution.
 
@@ -45,8 +45,12 @@ contrat sans décision documentée.
 - Le résultat d'une commande lancée par un agent n'est pas une preuve : un humain relance les tests avant la PR.
 
 ## Décisions ouvertes : ne pas trancher, les signaler
-Durée de vie du JWT, statut d'un budget à exactement 100 %, code d'erreur pour une catégorie inconnue,
-rate limiting (429), déconnexion sans authentification requise.
+Statut d'un budget à exactement 100 %, code d'erreur pour une catégorie inconnue,
+déconnexion sans authentification requise.
+
+## Décisions tranchées (voir `docs/api-design.md`)
+- Durée de vie du JWT : 30 minutes, sans refresh token (issue #8).
+- Limitation des tentatives de connexion (429) : 5 échecs sur 15 minutes par email, compteur en mémoire (issue #8).
 
 ## Commandes
 - Démarrer : `cp .env.example .env && docker compose up --build`
