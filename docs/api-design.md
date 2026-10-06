@@ -60,7 +60,7 @@ La colonne **Connexion requise** indique si l'utilisateur doit être authentifi�
 |---|---|---|---|---|---|
 | GET | `/api/categories` | Oui | | `200` liste des 6 catégories prédéfinies `[{id, nom}]` | 401 |
 
-Les catégories sont prédéfinies, communes à tous et en lecture seule : il n'y a pas de route pour en créer, modifier ou supprimer.
+Les catégories sont prédéfinies, communes à tous et en lecture seule : il n'y a pas de route pour en créer, modifier ou supprimer. La liste est triée par nom (ordre alphabétique) et ne contient que `id` et `nom`.
 
 ### Dépenses
 | Méthode | Route | Connexion requise | Entrée | Sortie | Erreurs |
