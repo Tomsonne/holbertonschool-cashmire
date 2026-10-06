@@ -1,4 +1,8 @@
+from datetime import date
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -6,11 +10,39 @@ from app.core.erreurs import ErreurApi
 from app.db.session import get_db
 from app.models.budget import Budget
 from app.models.categorie import Categorie
-from app.schemas.budget import BudgetCreation, BudgetResponse
+from app.schemas.budget import BudgetCreation, BudgetResponse, MoisBudget
 from app.services.budgets import presenter_budget
 from app.services.utilisateur_courant import resoudre_utilisateur_courant
 
 router = APIRouter()
+
+
+@router.get("/budgets", response_model=list[BudgetResponse])
+def lister_budgets(mois: MoisBudget | None = None, session: Session = Depends(get_db)):
+    utilisateur = resoudre_utilisateur_courant(session)
+    requete = (
+        select(Budget, Categorie)
+        .join(Categorie, Budget.categorie_id == Categorie.id)
+        .where(Budget.utilisateur_id == utilisateur.id)
+        .order_by(Budget.periode_mois.desc(), Categorie.nom)
+    )
+    if mois is not None:
+        requete = requete.where(Budget.periode_mois == date.fromisoformat(f"{mois}-01"))
+    return [presenter_budget(session, budget, categorie) for budget, categorie in session.execute(requete)]
+
+
+@router.get("/budgets/{budget_id}", response_model=BudgetResponse)
+def obtenir_budget(budget_id: UUID, session: Session = Depends(get_db)):
+    utilisateur = resoudre_utilisateur_courant(session)
+    ligne = session.execute(
+        select(Budget, Categorie)
+        .join(Categorie, Budget.categorie_id == Categorie.id)
+        .where(Budget.id == budget_id, Budget.utilisateur_id == utilisateur.id)
+    ).one_or_none()
+    if ligne is None:
+        raise ErreurApi(404, "Budget introuvable.")
+    budget, categorie = ligne
+    return presenter_budget(session, budget, categorie)
 
 
 @router.post("/budgets", response_model=BudgetResponse, status_code=201)
