@@ -17,6 +17,7 @@ Seule exception de langue : `/api/health`, nom conventionnel des routes de super
 |---|---|---|
 | 400 | `requete_invalide` | Requête mal formée |
 | 401 | `non_authentifie` | Jeton absent, invalide ou expiré |
+| 403 | `origine_refusee` | Écriture (POST, PUT, PATCH, DELETE) dont l'origine n'est pas autorisée |
 | 404 | `introuvable` | Ressource inexistante **ou appartenant à un autre utilisateur** (on ne révèle pas son existence) |
 | 409 | `conflit` | Doublon (email, budget du même mois) |
 | 422 | `donnees_invalides` | Données invalides |
@@ -147,10 +148,27 @@ Précisions :
 ## Règles transverses
 - Toute requête de lecture ou d'écriture est filtrée par l'utilisateur authentifié (jamais par un `utilisateur_id` envoyé par le client).
 - Cookie de session : `HttpOnly`, `SameSite=Lax`, `Secure` en production.
-- La protection CSRF prévue combine `SameSite=Lax` et la vérification de l'origine ; cette dernière reste à raccorder.
+- La protection CSRF combine `SameSite=Lax` et la vérification de l'origine des requêtes d'écriture (voir ci-dessous).
 - Le JWT n'est pas révocable côté serveur : la sécurité repose sur son expiration courte et sur le cookie `HttpOnly`.
 
+<<<<<<< HEAD
 > **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `POST /api/authentification/deconnexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. Les catégories sont implémentées (#12) ainsi que les dépenses (#13 à #15). Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).
+=======
+### Vérification de l'origine
+Toute requête `POST`, `PUT`, `PATCH` ou `DELETE` vers une route existante est contrôlée, y compris `/inscription` et `/connexion`. `GET`, `HEAD` et `OPTIONS` ne le sont pas.
+- Si l'en-tête `Origin` est présent, il doit figurer dans `ALLOWED_ORIGINS` (comparaison exacte ; `Origin: null` est refusé).
+- Sinon, on compare l'origine extraite de `Referer` (schéma, hôte et port).
+- Un `Referer` illisible (par exemple `http://[abc/`) est traité comme absent : la requête est refusée en `403`.
+- Sans `Origin` ni `Referer`, la requête est refusée.
+
+Refus : `403 {"erreur": {"code": "origine_refusee", "message": "Origine non autorisée."}}`, sans `champs`.
+
+La vérification est une dépendance globale de l'application (`app/core/origine.py`, enregistrée par `FastAPI(dependencies=[...])`) : elle s'exécute avant l'authentification, la validation du corps et la route. Une écriture d'origine refusée répond donc `403` même sans cookie ou avec des données invalides (au lieu de `401` ou `422`), et une connexion refusée n'incrémente jamais le compteur de tentatives. Exceptions : une route inconnue répond toujours `404` (la dépendance n'est pas appelée), et un corps qui n'est pas du JSON valide répond `400`, car FastAPI le décode avant d'appeler les dépendances. Aucun `CORSMiddleware` n'est installé : le front appelle `/api` par le proxy Vite, donc depuis la même origine.
+
+`ALLOWED_ORIGINS` est une liste séparée par des virgules (espaces tolérés autour) ; chaque entrée a la forme `http(s)://hote[:port]`, sans chemin, sans `/` final, jamais `*`. Défaut : `http://localhost:5173`. Une liste vide ou une entrée invalide empêche l'application (et `alembic`) de démarrer ; le message d'erreur ne recopie pas la valeur. De même, `ENVIRONMENT` n'accepte que `development` ou `production`.
+
+> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `POST /api/authentification/deconnexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. Les catégories et les dépenses restent à développer. Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).
+>>>>>>> 3a70e09 (docs: documenter la vérification de l'origine (#11))
 >
 > **Dépendance `utilisateur_courant` (issue #9) :** `app/core/authentification.py` lit uniquement le cookie `access_token` (jamais l'en-tête `Authorization`), vérifie signature et expiration (HS256 imposé côté serveur ; `exp` et `sub` obligatoires), convertit `sub` en UUID, puis charge l'utilisateur par une requête SQL (jamais depuis la mémoire de la session). Toute route privée l'utilise via `Depends(utilisateur_courant)`. Tous les échecs (cookie absent ou vide, jeton illisible, mauvaise clé, expiré, mauvais algorithme, `exp` ou `sub` absent, `sub` non UUID, utilisateur inexistant) renvoient la **même** `401` : `{"erreur": {"code": "non_authentifie", "message": "Authentification requise."}}`, sans `champs`. Le JWT n'est **pas révocable** avant son expiration : un jeton reste accepté tant que l'utilisateur existe et que `exp` n'est pas dépassé.
 
@@ -158,6 +176,8 @@ Précisions :
 - Le compteur de tentatives est **par worker uvicorn** et disparaît au redémarrage.
 - Un attaquant qui connaît un email peut **bloquer temporairement** la connexion de ce compte (5 échecs suffisent pendant 15 minutes).
 - Le JWT **n'est pas révocable** avant son expiration (30 minutes).
-- La protection CSRF par vérification de l'origine **n'est pas traitée dans #8** ; seul `SameSite=Lax` s'applique pour l'instant.
+- La protection CSRF par vérification de l'origine est **traitée dans #11** (voir « Vérification de l'origine »), en plus de `SameSite=Lax`.
+- Sans `Origin`, la décision repose sur `Referer` (repli) : un client qui n'envoie aucun des deux est refusé.
+- Le comportement derrière un reverse proxy (réécriture de `Origin` ou de `Referer`, origine publique différente) **n'est pas traité**.
 - Deux requêtes simultanées sur un même email peuvent passer avant l'enregistrement d'un échec
 - La mémoire du limiteur n'a pas de borne dure
