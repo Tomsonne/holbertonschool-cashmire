@@ -14,7 +14,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Ouvrir http://localhost:5173. L’API est accessible sur http://localhost:8000/api/health et sa documentation sur http://localhost:8000/docs. Le frontend appelle `/api/health` en chemin relatif. Vite relaie cette requête vers le service `api` sur le réseau Compose ; le navigateur ne connaît pas le nom Docker `api`.
+Ouvrir http://localhost:5173 : la gestion des budgets est également accessible sur http://localhost:5173/budgets. Un formulaire de connexion utilise le cookie JWT de l'API ; il faut disposer d'un compte créé par `POST /api/authentification/inscription` (accessible dans la documentation API). L'ancien écran de santé reste accessible sur http://localhost:5173/etat-technique. L’API est accessible sur http://localhost:8000/api/health et sa documentation sur http://localhost:8000/docs. Le frontend appelle `/api` en chemin relatif. Vite relaie ces requêtes vers le service `api` sur le réseau Compose ; le navigateur ne connaît pas le nom Docker `api`.
 
 Compose attend PostgreSQL, exécute `alembic upgrade head` dans le service `migrate`, puis démarre l’API après la réussite des migrations. Les données persistent dans `postgres_data`.
 
