@@ -36,3 +36,10 @@ class DepenseSortie(BaseModel):
     libelle: str
     date_depense: date
     categorie: CategorieSortie
+
+
+class ListeDepensesSortie(BaseModel):
+    """Une page de dépenses. `total` compte toutes les dépenses du filtre, avant la pagination."""
+
+    elements: list[DepenseSortie]
+    total: int
