@@ -28,3 +28,11 @@ export function messageErreur(error: unknown): string {
 export function montantLisible(value: string): string {
   return `${value.replace('.', ',')} €`;
 }
+
+export function iconeCategorie(nom: string): string | null {
+  const cle = nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (['alimentation', 'factures', 'loisirs', 'transport'].includes(cle)) {
+    return `/assets/cashmire/icon-${cle}.png`;
+  }
+  return null;
+}
