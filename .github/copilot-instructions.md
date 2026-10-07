@@ -45,12 +45,12 @@ contrat sans décision documentée.
 - Le résultat d'une commande lancée par un agent n'est pas une preuve : un humain relance les tests avant la PR.
 
 ## Décisions ouvertes : ne pas trancher, les signaler
-Statut d'un budget à exactement 100 %, code d'erreur pour une catégorie inconnue,
-déconnexion sans authentification requise.
+Statut d'un budget à exactement 100 %, code d'erreur pour une catégorie inconnue.
 
 ## Décisions tranchées (voir `docs/api-design.md`)
 - Durée de vie du JWT : 30 minutes, sans refresh token (issue #8).
 - Limitation des tentatives de connexion (429) : 5 échecs sur 15 minutes par email, compteur en mémoire (issue #8).
+- Déconnexion sans authentification valide : `401`, pas de `204` idempotent ; le JWT n'est pas révoqué, seul le cookie est effacé (issue #10).
 
 ## Commandes
 - Démarrer : `cp .env.example .env && docker compose up --build`

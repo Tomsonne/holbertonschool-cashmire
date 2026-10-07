@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 import jwt
 from argon2 import PasswordHasher
@@ -11,6 +12,21 @@ _hasher = PasswordHasher()
 
 # Nom du cookie portant le JWT (choix d'équipe, absent du contrat) : réutilisé par #9 et #10.
 NOM_COOKIE_JWT = "access_token"
+
+
+def attributs_cookie_jwt() -> dict[str, Any]:
+    """Emplacement et sécurité du cookie JWT, communs à la connexion et à la déconnexion.
+
+    Un navigateur n'efface un cookie que si `Path` (et le domaine) correspondent : les deux routes
+    doivent donc partager ces valeurs. Fonction plutôt que constante : `Secure` dépend de
+    l'environnement lu au moment de l'appel. `Max-Age` reste propre à la connexion.
+    """
+    return {
+        "path": "/",
+        "httponly": True,
+        "samesite": "lax",
+        "secure": settings.environment == "production",
+    }
 
 
 def hacher_mot_de_passe(mot_de_passe: str) -> str:
