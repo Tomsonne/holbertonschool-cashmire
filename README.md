@@ -1,6 +1,6 @@
 # Cashmire
 
-Socle pédagogique full-stack pour la gestion des dépenses : Svelte/TypeScript, FastAPI, SQLAlchemy et PostgreSQL. L’API de santé, l’inscription, la connexion et les routes de création, consultation, modification et suppression des budgets mensuels sont implémentées. Les autres routes métier restent à développer.
+Socle pédagogique full-stack pour la gestion des dépenses : Svelte/TypeScript, FastAPI, SQLAlchemy et PostgreSQL. L’API de santé, l’inscription, la connexion, la déconnexion, la route de l’utilisateur connecté et les routes de création, consultation, modification et suppression des budgets mensuels sont implémentées. Les autres routes métier restent à développer.
 
 ## Prérequis
 
@@ -20,7 +20,7 @@ Compose attend PostgreSQL, exécute `alembic upgrade head` dans le service `migr
 
 ## Configuration
 
-Les paramètres sont listés dans `.env.example`. Les valeurs sont factices et locales. `JWT_SECRET` est obligatoire et doit contenir au moins 32 caractères, y compris en développement et lors des migrations. `JWT_EXPIRE_MINUTES` doit être positif ; sa valeur par défaut est de 30 minutes. `ALLOWED_ORIGINS` reste à raccorder à la protection par origine. En production, le cookie JWT devra être `HttpOnly`, `SameSite=Lax` et `Secure`. Selon le contrat API, la déconnexion effacera le cookie sans révoquer le JWT côté serveur avant son expiration.
+Les paramètres sont listés dans `.env.example`. Les valeurs sont factices et locales. `JWT_SECRET` est obligatoire et doit contenir au moins 32 caractères, y compris en développement et lors des migrations. `JWT_EXPIRE_MINUTES` doit être positif ; sa valeur par défaut est de 30 minutes. `ALLOWED_ORIGINS` reste à raccorder à la protection par origine. En production, le cookie JWT devra être `HttpOnly`, `SameSite=Lax` et `Secure`. `POST /api/authentification/deconnexion` exige un cookie valide, répond `204` et efface le cookie ; le JWT n’est pas révoqué côté serveur et reste valable jusqu’à son expiration.
 
 Les cinq routes budgets utilisent l’utilisateur authentifié par le cookie JWT via `utilisateur_courant`. Chaque lecture et modification est limitée à ses budgets ; un budget appartenant à un autre utilisateur répond `404`. Sans cookie valide, la réponse est `401`. Aucun identifiant utilisateur n’est accepté dans le corps JSON.
 
