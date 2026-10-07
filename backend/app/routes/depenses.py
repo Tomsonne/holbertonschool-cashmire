@@ -1,15 +1,26 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.authentification import utilisateur_courant
 from app.db.session import get_db
 from app.models.utilisateur import Utilisateur
 from app.schemas.budget import MoisBudget
-from app.schemas.depense import DepenseEntree, DepenseSortie, ListeDepensesSortie
-from app.services.depenses import creer_depense, lister_depenses, obtenir_depense
+from app.schemas.depense import (
+    DepenseEntree,
+    DepenseModification,
+    DepenseSortie,
+    ListeDepensesSortie,
+)
+from app.services.depenses import (
+    creer_depense,
+    lister_depenses,
+    modifier_depense,
+    obtenir_depense,
+    supprimer_depense,
+)
 
 router = APIRouter()
 
@@ -42,3 +53,23 @@ def detail_depense(
     db: Session = Depends(get_db),
 ) -> DepenseSortie:
     return obtenir_depense(db, utilisateur, depense_id)
+
+
+@router.patch("/{depense_id}", response_model=DepenseSortie)
+def modification_depense(
+    depense_id: uuid.UUID,
+    donnees: DepenseModification,
+    utilisateur: Utilisateur = Depends(utilisateur_courant),
+    db: Session = Depends(get_db),
+) -> DepenseSortie:
+    return modifier_depense(db, utilisateur, depense_id, donnees)
+
+
+@router.delete("/{depense_id}", status_code=204, response_model=None)
+def suppression_depense(
+    depense_id: uuid.UUID,
+    utilisateur: Utilisateur = Depends(utilisateur_courant),
+    db: Session = Depends(get_db),
+) -> Response:
+    supprimer_depense(db, utilisateur, depense_id)
+    return Response(status_code=204)
