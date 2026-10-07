@@ -41,4 +41,20 @@ describe('Cashmire health screen', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/categories', expect.objectContaining({ credentials: 'include' }));
     expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/budgets\?mois=/), expect.objectContaining({ credentials: 'include' }));
   });
+
+  it('ouvre la synthèse avec les dépenses de l’API', async () => {
+    window.history.replaceState({}, '', '/synthese');
+    const json = (valeur: unknown, status = 200) => new Response(JSON.stringify(valeur), { status });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/authentification/moi')) return json({ id: 'u-1', nom_affichage: 'Alice', email: 'alice@example.test' });
+      if (url.endsWith('/categories')) return json([]);
+      if (url.startsWith('/api/budgets?')) return json([]);
+      if (url.startsWith('/api/depenses?')) return json({ elements: [{ id: 'd-1', libelle: 'Courses', montant: '12.30', date_depense: '2026-10-01', categorie: { id: 'c-1', nom: 'Alimentation' } }], total: 1 });
+      throw new Error(`Requête inattendue : ${url}`);
+    });
+    render(App);
+    expect(await screen.findByText('Courses')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/depenses\?mois=.*limite=100&decalage=0/), expect.objectContaining({ credentials: 'include' }));
+  });
 });
