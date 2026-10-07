@@ -98,6 +98,13 @@ Les catégories sont prédéfinies, communes à tous et en lecture seule : il n'
 
 Les filtres se combinent. Le tri est toujours par `date_depense` décroissante. `total` est le nombre de dépenses correspondant aux filtres, calculé **avant** la pagination : il ne dépend ni de `limite` ni de `decalage`. Une liste vide renvoie `200 {"elements": [], "total": 0}`.
 
+Précisions :
+- Les dépenses du même jour sont départagées par date de création puis par identifiant, pour que deux pages successives ne répètent ni n'oublient aucune dépense.
+- Un `categorie_id` bien formé mais inconnu n'est pas une erreur : c'est un filtre qui ne trouve rien (`200`, liste vide). Seul un UUID mal formé donne 422.
+- Un `decalage` au-delà du total renvoie `elements` vide et le vrai `total`.
+
+**`GET /api/depenses/{id}` :** renvoie la dépense au même format que la création. Une dépense **inexistante** et une dépense **d'un autre utilisateur** donnent exactement la même réponse (`404 introuvable`) : le client ne peut pas deviner qu'un identifiant existe. Identifiant mal formé : 422.
+
 ### Budgets
 | Méthode | Route | Connexion requise | Entrée | Sortie | Erreurs |
 |---|---|---|---|---|---|
