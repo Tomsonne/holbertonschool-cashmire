@@ -537,8 +537,8 @@ def test_deux_vrais_cookies_isolent_budgets_et_depenses_et_preservent_les_depens
     from app.main import app
 
     categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
-    autre_client = TestClient(app, raise_server_exceptions=False)
-    sans_cookie = TestClient(app, raise_server_exceptions=False)
+    autre_client = TestClient(app, raise_server_exceptions=False, headers={"Origin": "http://localhost:5173"})
+    sans_cookie = TestClient(app, raise_server_exceptions=False, headers={"Origin": "http://localhost:5173"})
     client.cookies.clear()  # la fixture de ce module pose un JWT factice sur ce client
     mois = date.today().strftime("%Y-%m")
     corps_budget = {
