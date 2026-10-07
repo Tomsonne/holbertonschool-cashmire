@@ -151,9 +151,6 @@ Précisions :
 - La protection CSRF combine `SameSite=Lax` et la vérification de l'origine des requêtes d'écriture (voir ci-dessous).
 - Le JWT n'est pas révocable côté serveur : la sécurité repose sur son expiration courte et sur le cookie `HttpOnly`.
 
-<<<<<<< HEAD
-> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `POST /api/authentification/deconnexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. Les catégories sont implémentées (#12) ainsi que les dépenses (#13 à #15). Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).
-=======
 ### Vérification de l'origine
 Toute requête `POST`, `PUT`, `PATCH` ou `DELETE` vers une route existante est contrôlée, y compris `/inscription` et `/connexion`. `GET`, `HEAD` et `OPTIONS` ne le sont pas.
 - Si l'en-tête `Origin` est présent, il doit figurer dans `ALLOWED_ORIGINS` (comparaison exacte ; `Origin: null` est refusé).
@@ -167,8 +164,7 @@ La vérification est une dépendance globale de l'application (`app/core/origine
 
 `ALLOWED_ORIGINS` est une liste séparée par des virgules (espaces tolérés autour) ; chaque entrée a la forme `http(s)://hote[:port]`, sans chemin, sans `/` final, jamais `*`. Défaut : `http://localhost:5173`. Une liste vide ou une entrée invalide empêche l'application (et `alembic`) de démarrer ; le message d'erreur ne recopie pas la valeur. De même, `ENVIRONMENT` n'accepte que `development` ou `production`.
 
-> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `POST /api/authentification/deconnexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. Les catégories et les dépenses restent à développer. Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).
->>>>>>> 3a70e09 (docs: documenter la vérification de l'origine (#11))
+> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `POST /api/authentification/deconnexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. Les catégories sont implémentées (#12) ainsi que les dépenses (#13 à #15). Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).
 >
 > **Dépendance `utilisateur_courant` (issue #9) :** `app/core/authentification.py` lit uniquement le cookie `access_token` (jamais l'en-tête `Authorization`), vérifie signature et expiration (HS256 imposé côté serveur ; `exp` et `sub` obligatoires), convertit `sub` en UUID, puis charge l'utilisateur par une requête SQL (jamais depuis la mémoire de la session). Toute route privée l'utilise via `Depends(utilisateur_courant)`. Tous les échecs (cookie absent ou vide, jeton illisible, mauvaise clé, expiré, mauvais algorithme, `exp` ou `sub` absent, `sub` non UUID, utilisateur inexistant) renvoient la **même** `401` : `{"erreur": {"code": "non_authentifie", "message": "Authentification requise."}}`, sans `champs`. Le JWT n'est **pas révocable** avant son expiration : un jeton reste accepté tant que l'utilisateur existe et que `exp` n'est pas dépassé.
 
