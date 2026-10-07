@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.authentification import utilisateur_courant
 from app.core.config import settings
-from app.core.securite import NOM_COOKIE_JWT
+from app.core.securite import NOM_COOKIE_JWT, attributs_cookie_jwt
 from app.db.session import get_db
 from app.models.utilisateur import Utilisateur
 from app.schemas.utilisateur import ConnexionEntree, InscriptionEntree, UtilisateurSortie
@@ -28,12 +28,16 @@ def connexion(
         key=NOM_COOKIE_JWT,
         value=jeton,
         max_age=settings.jwt_expire_minutes * 60,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=settings.environment == "production",
+        **attributs_cookie_jwt(),
     )
     return utilisateur
+
+
+@router.post("/deconnexion", status_code=204, dependencies=[Depends(utilisateur_courant)])
+def deconnexion(response: Response) -> None:
+    # Efface seulement le cookie : le JWT n'est pas révoqué et reste valable jusqu'à son `exp`.
+    # L'en-tête est posé sur la réponse injectée ; un Response neuf le perdrait.
+    response.delete_cookie(key=NOM_COOKIE_JWT, **attributs_cookie_jwt())
 
 
 @router.get("/moi", response_model=UtilisateurSortie)
