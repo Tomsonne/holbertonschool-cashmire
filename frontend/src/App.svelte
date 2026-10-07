@@ -1,13 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { budgetsApi, sessionApi, type Utilisateur } from './lib/api/budgets';
+  import { chargerPageDepenses } from './lib/api/depenses';
   import { getHealth } from './lib/api/health';
   import type { Categorie, ErreurApi } from './lib/budgets';
   import BudgetManager from './lib/components/BudgetManager.svelte';
   import HealthCard from './lib/components/HealthCard.svelte';
+  import MonthlyDashboard from './lib/components/MonthlyDashboard.svelte';
 
   const chemin = window.location.pathname;
   const pageBudgets = chemin === '/' || chemin === '/budgets';
+  const pageSynthese = chemin === '/synthese' || chemin === '/dashboard';
+  const pagePrivee = pageBudgets || pageSynthese;
   const pageTechnique = chemin === '/etat-technique';
   let etatSante = $state<'loading' | 'ready' | 'failed'>('loading');
   let etatSession = $state<'chargement' | 'deconnecte' | 'pret' | 'erreur'>('chargement');
@@ -64,20 +68,21 @@
   }
 
   onMount(() => {
-    if (pageBudgets) void chargerSession();
+    if (pagePrivee) void chargerSession();
     if (pageTechnique) void verifierSante();
   });
 </script>
 
-{#if pageBudgets}
+{#if pagePrivee}
   {#if etatSession === 'pret'}
-    <div class="session-bar"><span>Bonjour, {utilisateur?.nom_affichage}</span><button type="button" onclick={deconnecter}>Se déconnecter</button></div>
+    <div class="session-bar"><nav aria-label="Pages disponibles"><a href="/synthese" aria-current={pageSynthese ? 'page' : undefined}>Synthèse</a><a href="/budgets" aria-current={pageBudgets ? 'page' : undefined}>Budgets</a></nav><span>Bonjour, {utilisateur?.nom_affichage}</span><button type="button" onclick={deconnecter}>Se déconnecter</button></div>
     {#if message}<p class="session-message" role="alert">{message}</p>{/if}
-    <BudgetManager {categories} loadBudgets={budgetsApi.lister} createBudget={budgetsApi.creer} updateBudget={budgetsApi.modifier} deleteBudget={budgetsApi.supprimer} />
+    {#if pageBudgets}<BudgetManager {categories} loadBudgets={budgetsApi.lister} createBudget={budgetsApi.creer} updateBudget={budgetsApi.modifier} deleteBudget={budgetsApi.supprimer} />
+    {:else}<MonthlyDashboard loadBudgets={budgetsApi.lister} loadExpensePage={chargerPageDepenses} />{/if}
   {:else}
     <main class="access-page cashmire-page">
       <div class="cashmire-shell">
-        <header class="access-header cashmire-card"><img class="cashmire-logo-image" src="/assets/cashmire/logo-emblem.png" alt="" /><strong>Cashmire</strong></header>
+        <header class="access-header cashmire-card"><img class="cashmire-logo-image" src="/assets/cashmire/logo-emblem.png" alt="" /><strong>Cashmire</strong><nav aria-label="Pages disponibles"><a href="/synthese">Synthèse</a><a href="/budgets">Budgets</a></nav></header>
         <div class="access-layout">
           <section class="access-illustration cashmire-hero"><img class="cashmire-hero-media" src="/assets/cashmire/hero-village.png" alt="" /><div><h1>Des budgets bien construits.</h1><p>Chaque dépense trouve sa place.</p></div></section>
           <section class="access-card cashmire-card" aria-label="Accès aux budgets">
@@ -118,6 +123,9 @@
   .access-page * { box-sizing: border-box; }
   .access-header { display: flex; align-items: center; gap: 8px; padding: 10px 20px; margin-bottom: 16px; }
   .access-header strong { font: 700 27px var(--story-font); }
+  .access-header nav { display: flex; gap: 16px; margin-left: auto; }
+  .access-header a, .session-bar a { color: var(--ink); font-weight: 700; }
+  .access-header a:hover, .session-bar a:hover { color: #9a3028; }
   .access-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 16px; }
   .access-illustration { display: flex; align-items: flex-start; padding: 28px; }
   .access-illustration > div { width: 50%; }
@@ -131,9 +139,15 @@
   .access-page :focus-visible { outline: 3px solid #754a0b; outline-offset: 3px; }
   .login-error, .session-message { color: #922514; }
   .session-bar { display: flex; justify-content: flex-end; align-items: center; gap: 16px; padding: 8px 24px; color: var(--ink); background: var(--ivory); font: 14px var(--body-font); }
+  .session-bar nav { display: flex; gap: 16px; margin-right: auto; }
+  .session-bar [aria-current='page'] { text-decoration-thickness: 3px; text-underline-offset: 7px; }
   .session-bar button { min-height: 44px; padding: 8px 12px; color: var(--ink); background: var(--ivory); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
   .session-message { padding: 8px 24px; background: #fce5dd; }
   @media (max-width: 767px) {
+    .access-header { flex-wrap: wrap; }
+    .access-header nav { margin-left: 0; width: 100%; }
+    .session-bar { flex-wrap: wrap; padding: 8px 12px; }
+    .session-bar nav { width: 100%; }
     .access-layout { grid-template-columns: 1fr; }
     .access-illustration { display: block; padding: 0; }
     .access-illustration > div { width: 100%; padding: 20px; }
