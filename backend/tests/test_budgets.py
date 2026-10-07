@@ -450,3 +450,132 @@ def test_modification_et_suppression_isolent_les_utilisateurs(client, db_session
             assert reponse.status_code == 404
             assert reponse.json()["erreur"]["code"] == "introuvable"
     assert db_session.get(Budget, budget_etranger.id).montant_limite == Decimal("100.00")
+
+
+def test_somme_decimale_et_json_apres_changement_de_date_et_categorie(client, db_session):
+    alimentation = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    transport = db_session.scalar(select(Categorie).where(Categorie.nom == "Transport"))
+    premier = client.post("/api/budgets", json={
+        "categorie_id": str(alimentation.id), "montant_limite": "1.00", "mois": "2026-10"
+    }).json()
+    second = client.post("/api/budgets", json={
+        "categorie_id": str(transport.id), "montant_limite": "1.00", "mois": "2026-10"
+    }).json()
+    budget = db_session.get(Budget, premier["id"])
+    depense = Depense(
+        utilisateur_id=budget.utilisateur_id, categorie_id=alimentation.id,
+        montant=Decimal("0.10"), date_depense=date(2026, 10, 31), libelle="Mobile",
+    )
+    db_session.add_all([depense, Depense(
+        utilisateur_id=budget.utilisateur_id, categorie_id=alimentation.id,
+        montant=Decimal("0.20"), date_depense=date(2026, 10, 1), libelle="Autre",
+    )])
+    db_session.commit()
+
+    def depensee(budget_id):
+        reponse = client.get(f"/api/budgets/{budget_id}")
+        assert reponse.status_code == 200
+        return reponse.json()
+
+    assert (depensee(premier["id"])["depense"], depensee(premier["id"])["reste"]) == ("0.30", "0.70")
+    depense.date_depense = date(2026, 11, 1)
+    db_session.commit()
+    assert depensee(premier["id"])["depense"] == "0.20"
+    depense.date_depense = date(2026, 10, 31)
+    depense.categorie_id = transport.id
+    depense.montant = Decimal("0.35")
+    db_session.commit()
+    assert depensee(premier["id"])["depense"] == "0.20"
+    assert (depensee(second["id"])["depense"], depensee(second["id"])["pourcentage"]) == ("0.35", 35.0)
+    db_session.delete(depense)
+    db_session.commit()
+    assert depensee(second["id"])["depense"] == "0.00"
+
+
+def test_unicite_budget_portee_par_utilisateur_categorie_et_mois(client, db_session):
+    alimentation = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    transport = db_session.scalar(select(Categorie).where(Categorie.nom == "Transport"))
+    corps = {"categorie_id": str(alimentation.id), "montant_limite": "10.00", "mois": "2026-10"}
+    assert client.post("/api/budgets", json=corps).status_code == 201
+    assert client.post("/api/budgets", json=corps).status_code == 409
+    assert client.post("/api/budgets", json={**corps, "mois": "2026-11"}).status_code == 201
+    assert client.post("/api/budgets", json={**corps, "categorie_id": str(transport.id)}).status_code == 201
+    autre = Utilisateur(
+        email=f"autre-{uuid4()}@example.invalid", mot_de_passe_hache="inutilisable", nom_affichage="Autre"
+    )
+    db_session.add(autre)
+    db_session.commit()
+    db_session.add(Budget(
+        utilisateur_id=autre.id, categorie_id=alimentation.id,
+        montant_limite=Decimal("10.00"), periode_mois=date(2026, 10, 1), seuil_alerte_pct=80,
+    ))
+    db_session.commit()
+
+
+def test_fin_fevrier_bissextile_et_mois_suivant(client, db_session):
+    categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    cree = client.post("/api/budgets", json={
+        "categorie_id": str(categorie.id), "montant_limite": "100.00", "mois": "2024-02"
+    })
+    assert cree.status_code == 201
+    budget = db_session.get(Budget, cree.json()["id"])
+    for jour, montant in [(date(2024, 2, 29), "7.25"), (date(2024, 3, 1), "10.00")]:
+        db_session.add(Depense(
+            utilisateur_id=budget.utilisateur_id, categorie_id=categorie.id,
+            montant=Decimal(montant), date_depense=jour, libelle="Frontière",
+        ))
+    db_session.commit()
+    reponse = client.get(f"/api/budgets/{budget.id}")
+    assert reponse.status_code == 200
+    assert reponse.json()["depense"] == "7.25"
+
+
+def test_deux_vrais_cookies_isolent_budgets_et_depenses_et_preservent_les_depenses(
+    client, db_session
+):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
+    autre_client = TestClient(app, raise_server_exceptions=False)
+    sans_cookie = TestClient(app, raise_server_exceptions=False)
+    client.cookies.clear()  # la fixture de ce module pose un JWT factice sur ce client
+    mois = date.today().strftime("%Y-%m")
+    corps_budget = {
+        "categorie_id": str(categorie.id), "montant_limite": "10.00", "mois": mois
+    }
+    assert sans_cookie.get("/api/budgets").status_code == 401
+    assert sans_cookie.post("/api/depenses", json={}).status_code == 401
+
+    for utilisateur_client, email in (
+        (client, "alice@example.com"), (autre_client, "bob@example.com"),
+    ):
+        identifiants = {"email": email, "mot_de_passe": "mot-de-passe-de-test"}
+        assert utilisateur_client.post("/api/authentification/inscription", json={
+            **identifiants, "nom_affichage": "Test",
+        }).status_code == 201
+        connexion = utilisateur_client.post("/api/authentification/connexion", json=identifiants)
+        assert connexion.status_code == 200
+        assert utilisateur_client.cookies.get("access_token")
+
+    budget_alice = client.post("/api/budgets", json=corps_budget)
+    budget_bob = autre_client.post("/api/budgets", json=corps_budget)
+    assert (budget_alice.status_code, budget_bob.status_code) == (201, 201)
+    id_alice, id_bob = budget_alice.json()["id"], budget_bob.json()["id"]
+    assert [item["id"] for item in client.get("/api/budgets").json()] == [id_alice]
+    assert [item["id"] for item in autre_client.get("/api/budgets").json()] == [id_bob]
+    assert client.get(f"/api/budgets/{id_bob}").status_code == 404
+    assert autre_client.patch(f"/api/budgets/{id_alice}", json={
+        "montant_limite": "1.00"
+    }).status_code == 404
+
+    depense_alice = client.post("/api/depenses", json={
+        "categorie_id": str(categorie.id), "montant": "3.25", "libelle": "Courses",
+        "date_depense": date.today().isoformat(),
+    })
+    assert depense_alice.status_code == 201
+    assert client.get(f"/api/budgets/{id_alice}").json()["depense"] == "3.25"
+    assert autre_client.get(f"/api/budgets/{id_bob}").json()["depense"] == "0.00"
+    depense_id = depense_alice.json()["id"]
+    assert client.delete(f"/api/budgets/{id_alice}").status_code == 204
+    assert db_session.get(Depense, depense_id).montant == Decimal("3.25")
