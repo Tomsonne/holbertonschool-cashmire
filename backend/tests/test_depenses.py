@@ -211,3 +211,48 @@ def test_categorie_inconnue_renvoie_404_et_n_enregistre_rien(
     assert reponse.json()["erreur"]["code"] == "introuvable"
     assert reponse.json()["erreur"]["champs"] == {"categorie_id": "Catégorie inconnue."}
     assert _nombre_de_depenses(db_session) == 0
+
+
+# --- Avec la vraie authentification (cookie JWT posé par la connexion) -----------------------
+
+
+def _se_connecter(client, email: str) -> dict:
+    identifiants = {"email": email, "mot_de_passe": "un-mot-de-passe-long"}
+    assert client.post(
+        "/api/authentification/inscription", json={**identifiants, "nom_affichage": "Test"}
+    ).status_code == 201
+    assert client.post("/api/authentification/connexion", json=identifiants).status_code == 200
+    return client.get("/api/authentification/moi").json()
+
+
+def test_creation_avec_un_vrai_cookie_appartient_a_l_utilisateur_connecte(
+    client, categorie, db_session
+):
+    moi = _se_connecter(client, "alice@example.com")
+    reponse = client.post(URL, json=_corps(categorie))
+    assert reponse.status_code == 201
+    depense = db_session.get(Depense, reponse.json()["id"])
+    assert str(depense.utilisateur_id) == moi["id"]
+
+
+def test_deux_utilisateurs_ont_chacun_leurs_depenses(client, categorie, db_session):
+    from fastapi.testclient import TestClient
+
+    moi_alice = _se_connecter(client, "alice@example.com")
+    client_bob = TestClient(app, raise_server_exceptions=False)
+    moi_bob = _se_connecter(client_bob, "bob@example.com")
+    # Bob essaie d'imputer sa dépense à Alice via le corps de la requête : sans effet.
+    reponse = client_bob.post(URL, json=_corps(categorie, utilisateur_id=moi_alice["id"]))
+    assert reponse.status_code == 201
+    depense = db_session.get(Depense, reponse.json()["id"])
+    assert str(depense.utilisateur_id) == moi_bob["id"]
+    assert str(depense.utilisateur_id) != moi_alice["id"]
+
+
+def test_cookie_falsifie_renvoie_401_et_n_enregistre_rien(client, categorie, db_session):
+    _se_connecter(client, "alice@example.com")
+    for cookie in client.cookies.jar:
+        cookie.value = cookie.value[:-3] + "xxx"
+    reponse = client.post(URL, json=_corps(categorie))
+    assert reponse.status_code == 401
+    assert _nombre_de_depenses(db_session) == 0
