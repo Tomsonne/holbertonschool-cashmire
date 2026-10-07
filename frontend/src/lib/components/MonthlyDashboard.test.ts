@@ -19,5 +19,5 @@ it('affiche les montants et une alerte explicite renvoyée par l’API', async (
   });
   expect(await screen.findByText('La limite est dépassée.')).toBeInTheDocument();
   expect(screen.getByText(/2,30 € au-dessus de la limite/)).toBeInTheDocument();
-  expect(screen.getByText('Répartition par catégorie')).toBeInTheDocument();
+  expect(screen.getByText('Répartition des dépenses')).toBeInTheDocument();
 });
