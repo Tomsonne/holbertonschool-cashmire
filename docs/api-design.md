@@ -74,10 +74,18 @@ Les catégories sont prédéfinies, communes à tous et en lecture seule : il n'
 | Méthode | Route | Connexion requise | Entrée | Sortie | Erreurs |
 |---|---|---|---|---|---|
 | GET | `/api/depenses?mois=AAAA-MM&categorie_id=&limite=&decalage=` | Oui | | `200 {elements, total}` triées par date décroissante | 401, 422 |
-| POST | `/api/depenses` | Oui | `{montant, libelle, date_depense, categorie_id}` | `201` dépense | 401, 404 catégorie inconnue, 422 |
+| POST | `/api/depenses` | Oui | `{montant, libelle, date_depense, categorie_id}` | `201 {id, montant, libelle, date_depense, categorie: {id, nom}}` | 401, 404 catégorie inconnue, 422 |
 | GET | `/api/depenses/{id}` | Oui | | `200` dépense | 401, 404 |
 | PATCH | `/api/depenses/{id}` | Oui | champs à modifier | `200` dépense modifiée | 401, 404, 422 |
 | DELETE | `/api/depenses/{id}` | Oui | | `204` | 401, 404 |
+
+**Règles de `POST /api/depenses` :**
+- `montant` : `MontantPositif` (chaîne, strictement positif, 2 décimales au plus). Un nombre JSON, `0`, un négatif ou 3 décimales : 422.
+- `libelle` : espaces retirés aux extrémités, de 1 à 200 caractères. Vide ou trop long : 422.
+- `date_depense` : date ISO (`AAAA-MM-JJ`), du 01/01/2000 à **demain** inclus (un jour de tolérance pour le fuseau horaire de l'utilisateur). Une dépense a déjà eu lieu : le futur est refusé en 422.
+- `categorie_id` : UUID d'une des 6 catégories. UUID mal formé : 422 ; catégorie inexistante : **404** `introuvable`.
+- Le propriétaire est **toujours l'utilisateur connecté**. Un `utilisateur_id` envoyé par le client est ignoré, et la réponse ne contient jamais d'identifiant d'utilisateur.
+- Un corps qui n'est pas du JSON valide : 400. Rien n'est enregistré en cas d'erreur.
 
 **Paramètres de `GET /api/depenses` :**
 
