@@ -192,6 +192,8 @@ def test_sixieme_essai_rate_renvoie_429_sans_argon2(client, utilisateur, monkeyp
     erreur = reponse.json()["erreur"]
     assert erreur["code"] == "trop_de_tentatives"
     assert erreur["message"] == "Trop de tentatives, réessayez plus tard."
+    assert "champs" not in erreur
+    assert "retry-after" not in reponse.headers
     # Le limiteur est consulté avant Argon2 : aucun nouvel appel.
     assert len(espion.hashes) == 5
 

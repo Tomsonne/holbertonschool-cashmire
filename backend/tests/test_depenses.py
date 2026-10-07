@@ -239,7 +239,7 @@ def test_deux_utilisateurs_ont_chacun_leurs_depenses(client, categorie, db_sessi
     from fastapi.testclient import TestClient
 
     moi_alice = _se_connecter(client, "alice@example.com")
-    client_bob = TestClient(app, raise_server_exceptions=False)
+    client_bob = TestClient(app, raise_server_exceptions=False, headers={"Origin": "http://localhost:5173"})
     moi_bob = _se_connecter(client_bob, "bob@example.com")
     # Bob essaie d'imputer sa dépense à Alice via le corps de la requête : sans effet.
     reponse = client_bob.post(URL, json=_corps(categorie, utilisateur_id=moi_alice["id"]))

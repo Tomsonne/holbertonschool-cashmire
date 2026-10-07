@@ -319,7 +319,7 @@ def _se_connecter(client, email: str) -> dict:
 
 def test_deux_utilisateurs_reels_ne_voient_que_leurs_depenses(client, db_session, loisirs):
     moi_alice = _se_connecter(client, "alice@example.com")
-    client_bob = TestClient(app, raise_server_exceptions=False)
+    client_bob = TestClient(app, raise_server_exceptions=False, headers={"Origin": "http://localhost:5173"})
     moi_bob = _se_connecter(client_bob, "bob@example.com")
     alice = db_session.get(Utilisateur, moi_alice["id"])
     bob = db_session.get(Utilisateur, moi_bob["id"])

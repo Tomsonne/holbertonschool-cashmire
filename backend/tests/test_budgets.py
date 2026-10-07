@@ -119,7 +119,7 @@ def test_requetes_simultanees_ne_creent_qu_un_budget(client, base_propre):
         jeton = client.cookies.get(NOM_COOKIE_JWT)
 
         def creer_budget_simultane(_):
-            client_concurrent = TestClient(app)
+            client_concurrent = TestClient(app, headers={"Origin": "http://localhost:5173"})
             client_concurrent.cookies.set(NOM_COOKIE_JWT, jeton)
             return client_concurrent.post("/api/budgets", json={
                 "categorie_id": str(categorie_id), "montant_limite": "42.00", "mois": mois
@@ -537,8 +537,8 @@ def test_deux_vrais_cookies_isolent_budgets_et_depenses_et_preservent_les_depens
     from app.main import app
 
     categorie = db_session.scalar(select(Categorie).where(Categorie.nom == "Alimentation"))
-    autre_client = TestClient(app, raise_server_exceptions=False)
-    sans_cookie = TestClient(app, raise_server_exceptions=False)
+    autre_client = TestClient(app, raise_server_exceptions=False, headers={"Origin": "http://localhost:5173"})
+    sans_cookie = TestClient(app, raise_server_exceptions=False, headers={"Origin": "http://localhost:5173"})
     client.cookies.clear()  # la fixture de ce module pose un JWT factice sur ce client
     mois = date.today().strftime("%Y-%m")
     corps_budget = {
