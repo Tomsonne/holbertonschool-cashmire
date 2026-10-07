@@ -105,6 +105,19 @@ Précisions :
 
 **`GET /api/depenses/{id}` :** renvoie la dépense au même format que la création. Une dépense **inexistante** et une dépense **d'un autre utilisateur** donnent exactement la même réponse (`404 introuvable`) : le client ne peut pas deviner qu'un identifiant existe. Identifiant mal formé : 422.
 
+**Règles de `PATCH /api/depenses/{id}` :**
+- Seuls les champs **envoyés** sont modifiés : `montant`, `libelle`, `date_depense`, `categorie_id`. Les autres restent inchangés.
+- Chaque champ suit les règles de la création (montant strictement positif à 2 décimales, libellé de 1 à 200 caractères sans espaces aux extrémités, date du 01/01/2000 à demain, `categorie_id` d'une catégorie existante).
+- Comme pour les budgets : un champ **inconnu** (`utilisateur_id`, `id`, `date_creation`…) est refusé en 422 ; un champ présent ne peut pas valoir `null` ; un corps vide `{}` est refusé en 422. Le propriétaire ne change **jamais**.
+- Catégorie inexistante : **404** `introuvable` avec `champs.categorie_id`, comme à la création ; **rien** n'est modifié (même pas les autres champs envoyés).
+- `date_modification` est mise à jour à chaque modification réussie, même si les valeurs envoyées sont identiques aux anciennes ; `date_creation` ne change pas.
+- Dépense inexistante ou **d'un autre utilisateur** : 404, même réponse dans les deux cas. Identifiant mal formé : 422. Corps non JSON : 400.
+- Réponse : `200` avec la dépense modifiée, au même format que la création.
+
+**Règles de `DELETE /api/depenses/{id}` :**
+- Réponse `204` **sans corps**. La suppression est définitive ; la catégorie et l'utilisateur ne sont pas touchés.
+- Dépense inexistante ou d'un autre utilisateur : 404 (même réponse). Donc un second `DELETE` sur la même dépense répond 404. Identifiant mal formé : 422.
+
 ### Budgets
 | Méthode | Route | Connexion requise | Entrée | Sortie | Erreurs |
 |---|---|---|---|---|---|
@@ -137,7 +150,7 @@ Précisions :
 - La protection CSRF prévue combine `SameSite=Lax` et la vérification de l'origine ; cette dernière reste à raccorder.
 - Le JWT n'est pas révocable côté serveur : la sécurité repose sur son expiration courte et sur le cookie `HttpOnly`.
 
-> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `POST /api/authentification/deconnexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. Les catégories et les dépenses restent à développer. Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).
+> **Implémentation :** `GET /api/health`, `POST /api/authentification/inscription`, `POST /api/authentification/connexion`, `POST /api/authentification/deconnexion`, `GET /api/authentification/moi` et les cinq routes budgets (`GET /api/budgets`, `POST /api/budgets`, `GET /api/budgets/{id}`, `PATCH /api/budgets/{id}`, `DELETE /api/budgets/{id}`) sont implémentées. Les catégories sont implémentées (#12) ainsi que les dépenses (#13 à #15). Les routes budgets utilisent `Depends(utilisateur_courant)` pour identifier leur propriétaire (#19).
 >
 > **Dépendance `utilisateur_courant` (issue #9) :** `app/core/authentification.py` lit uniquement le cookie `access_token` (jamais l'en-tête `Authorization`), vérifie signature et expiration (HS256 imposé côté serveur ; `exp` et `sub` obligatoires), convertit `sub` en UUID, puis charge l'utilisateur par une requête SQL (jamais depuis la mémoire de la session). Toute route privée l'utilise via `Depends(utilisateur_courant)`. Tous les échecs (cookie absent ou vide, jeton illisible, mauvaise clé, expiré, mauvais algorithme, `exp` ou `sub` absent, `sub` non UUID, utilisateur inexistant) renvoient la **même** `401` : `{"erreur": {"code": "non_authentifie", "message": "Authentification requise."}}`, sans `champs`. Le JWT n'est **pas révocable** avant son expiration : un jeton reste accepté tant que l'utilisateur existe et que `exp` n'est pas dépassé.
 

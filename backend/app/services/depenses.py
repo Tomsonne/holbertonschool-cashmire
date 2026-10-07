@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -9,7 +9,12 @@ from app.models.categorie import Categorie
 from app.models.depense import Depense
 from app.models.utilisateur import Utilisateur
 from app.schemas.categorie import CategorieSortie
-from app.schemas.depense import DepenseEntree, DepenseSortie, ListeDepensesSortie
+from app.schemas.depense import (
+    DepenseEntree,
+    DepenseModification,
+    DepenseSortie,
+    ListeDepensesSortie,
+)
 
 
 def presenter_depense(depense: Depense, categorie: Categorie) -> DepenseSortie:
@@ -91,3 +96,45 @@ def obtenir_depense(db: Session, utilisateur: Utilisateur, depense_id: uuid.UUID
     if ligne is None:
         raise ErreurApi(404, "Dépense introuvable.")
     return presenter_depense(*ligne)
+
+
+def _depense_de_l_utilisateur(db: Session, utilisateur: Utilisateur, depense_id: uuid.UUID) -> Depense:
+    # Même règle que le détail : le propriétaire est dans la requête, donc la dépense d'autrui
+    # est « introuvable » et personne ne peut modifier ou supprimer celle d'un autre.
+    depense = db.scalar(
+        select(Depense).where(Depense.id == depense_id, Depense.utilisateur_id == utilisateur.id)
+    )
+    if depense is None:
+        raise ErreurApi(404, "Dépense introuvable.")
+    return depense
+
+
+def modifier_depense(
+    db: Session, utilisateur: Utilisateur, depense_id: uuid.UUID, donnees: DepenseModification
+) -> DepenseSortie:
+    depense = _depense_de_l_utilisateur(db, utilisateur, depense_id)
+    envoyes = donnees.model_fields_set  # seuls les champs réellement présents dans le corps
+    if "categorie_id" in envoyes:
+        categorie = db.get(Categorie, donnees.categorie_id)
+        if categorie is None:
+            raise ErreurApi(
+                404, "Catégorie introuvable.", champs={"categorie_id": "Catégorie inconnue."}
+            )
+        depense.categorie_id = categorie.id
+    else:
+        categorie = db.get(Categorie, depense.categorie_id)
+    for champ in ("montant", "libelle", "date_depense"):
+        if champ in envoyes:
+            setattr(depense, champ, getattr(donnees, champ))
+    # Posé explicitement : si les valeurs envoyées sont identiques aux anciennes, SQLAlchemy
+    # n'émettrait aucun UPDATE et `onupdate` ne se déclencherait pas.
+    depense.date_modification = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(depense)
+    return presenter_depense(depense, categorie)
+
+
+def supprimer_depense(db: Session, utilisateur: Utilisateur, depense_id: uuid.UUID) -> None:
+    depense = _depense_de_l_utilisateur(db, utilisateur, depense_id)
+    db.delete(depense)
+    db.commit()
