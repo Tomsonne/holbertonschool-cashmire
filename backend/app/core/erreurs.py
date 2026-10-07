@@ -13,6 +13,7 @@ un message fixe (aucun détail SQL ni trace).
 CODES_PAR_STATUT: dict[int, str] = {
     400: "requete_invalide",
     401: "non_authentifie",
+    403: "origine_refusee",
     404: "introuvable",
     409: "conflit",
     422: "donnees_invalides",

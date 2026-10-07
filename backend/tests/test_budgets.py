@@ -119,7 +119,7 @@ def test_requetes_simultanees_ne_creent_qu_un_budget(client, base_propre):
         jeton = client.cookies.get(NOM_COOKIE_JWT)
 
         def creer_budget_simultane(_):
-            client_concurrent = TestClient(app)
+            client_concurrent = TestClient(app, headers={"Origin": "http://localhost:5173"})
             client_concurrent.cookies.set(NOM_COOKIE_JWT, jeton)
             return client_concurrent.post("/api/budgets", json={
                 "categorie_id": str(categorie_id), "montant_limite": "42.00", "mois": mois

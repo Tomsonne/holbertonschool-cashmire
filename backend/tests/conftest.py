@@ -14,6 +14,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 URL_DE_TEST = os.environ.get("TEST_DATABASE_URL", "")
+# Origine du front, autorisée par ALLOWED_ORIGINS et envoyée par défaut par la fixture `client`.
+ORIGINE_DE_TEST = "http://localhost:5173"
 
 
 def _verifier_url_de_test(url: str) -> None:
@@ -38,6 +40,7 @@ os.environ["DATABASE_URL"] = URL_DE_TEST
 os.environ["JWT_SECRET"] = "cle-de-test-uniquement-0123456789-abcdef"
 os.environ["JWT_EXPIRE_MINUTES"] = "30"
 os.environ["ENVIRONMENT"] = "development"
+os.environ["ALLOWED_ORIGINS"] = ORIGINE_DE_TEST
 
 from app.core import limiteur  # noqa: E402
 from app.db.session import get_db  # noqa: E402
@@ -93,7 +96,8 @@ def client(db_session) -> Iterator[TestClient]:
     """TestClient dont toutes les requêtes d'un test partagent la même `db_session`.
 
     La session n'est pas fermée entre deux requêtes : sa fermeture reste à la charge de la
-    fixture `db_session`, en fin de test.
+    fixture `db_session`, en fin de test. Chaque requête envoie `Origin: ORIGINE_DE_TEST`, comme
+    le navigateur derrière le proxy Vite ; un test peut le retirer avec `del client.headers["origin"]`.
     """
 
     def get_db_de_test() -> Iterator[Session]:
@@ -102,6 +106,6 @@ def client(db_session) -> Iterator[TestClient]:
     app.dependency_overrides[get_db] = get_db_de_test
     # raise_server_exceptions=False : une exception inattendue donne la réponse 500 réelle.
     try:
-        yield TestClient(app, raise_server_exceptions=False)
+        yield TestClient(app, raise_server_exceptions=False, headers={"Origin": ORIGINE_DE_TEST})
     finally:
         app.dependency_overrides.pop(get_db, None)
