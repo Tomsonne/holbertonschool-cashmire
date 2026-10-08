@@ -1,12 +1,17 @@
 import re
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Une origine telle que l'envoie un navigateur : schéma http(s), hôte, port optionnel. Ni chemin,
 # ni `/` final, ni joker `*` : la comparaison avec l'en-tête `Origin` est exacte.
 _FORMAT_ORIGINE = re.compile(r"https?://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?")
+
+
+# Début des secrets publics du dépôt : `.env.example`, `tests/conftest.py` et la CI. Quiconque lit le
+# dépôt peut fabriquer un jeton valide avec eux : ils sont refusés en production.
+_DEBUTS_DE_SECRETS_PUBLICS = ("replace-with-", "cle-de-test-", "ci-only-")
 
 
 class Settings(BaseSettings):
@@ -35,6 +40,18 @@ class Settings(BaseSettings):
                 "ALLOWED_ORIGINS doit lister des origines http(s)://hote[:port] séparées par des virgules."
             )
         return ",".join(origines)
+
+    @model_validator(mode="after")
+    def refuser_un_secret_public_en_production(self) -> "Settings":
+        # La casse et les espaces en tête ne doivent pas contourner le refus.
+        secret = self.jwt_secret.strip().lower()
+        if self.environment == "production" and secret.startswith(_DEBUTS_DE_SECRETS_PUBLICS):
+            # Message fixe : la valeur fournie n'est pas recopiée.
+            raise ValueError(
+                "JWT_SECRET est une valeur d'exemple publique : générez un secret aléatoire avant "
+                "la production (openssl rand -hex 32), voir le README."
+            )
+        return self
 
     @property
     def origines_autorisees(self) -> list[str]:
