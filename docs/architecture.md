@@ -26,9 +26,10 @@ flowchart LR
 
 ## Frontend
 
-- `src/App.svelte` pilote chargement, opérationnel et échec.
-- `src/lib/api/` centralise `fetch` et ses types.
-- `src/lib/components/` contient la carte d’état réutilisable.
+- `src/App.svelte` choisit l’écran d’après `src/lib/routes.ts` et pilote chargement, opérationnel et échec.
+- `src/lib/api/` centralise `fetch`, ses types et l’erreur `ErreurApi` ; le client signale les sessions expirées sans rediriger.
+- `src/lib/session.svelte.ts` porte l’état de session partagé (utilisateur, état, message).
+- `src/lib/components/` contient les composants réutilisables, dont la navigation unique.
 - `src/*.test.ts` teste l’interface avec Vitest et Testing Library.
 - Vite cible `api:8000` côté réseau Compose. Les appels navigateur restent relatifs à l’origine.
 

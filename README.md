@@ -62,6 +62,13 @@ npm run build
 
 En local hors Docker, démarrez PostgreSQL, réglez `DATABASE_URL` sur `localhost`, lancez `uvicorn app.main:app --reload` depuis `backend` et `npm run dev` depuis `frontend`. Adaptez alors la cible du proxy Vite à `http://localhost:8000`.
 
+## Frontend : navigation, client API et session
+
+- **Client API** (`frontend/src/lib/api/client.ts`) : `requeteApi` appelle `/api` en relatif avec le cookie. Toute réponse non 2xx lève une `ErreurApi` (`lib/api/erreurs.ts`) portant `status`, `code` et `champs` repris du corps `{erreur: {code, message, champs}}`. Une panne réseau lève `status: 0`, `code: 'reseau'`. Un `204` renvoie `undefined`. `surSessionExpiree(rappel)` enregistre un écouteur appelé sur tout `401`, sauf pour `/authentification/connexion`, `/inscription`, `/moi` et `/deconnexion`, où un `401` ne signifie pas qu'une session ouverte a expiré ; elle renvoie la fonction de désinscription. Le client ne redirige jamais.
+- **Store de session** (`frontend/src/lib/session.svelte.ts`) : seule source de l'utilisateur connecté (`utilisateur`, `etat`, `message`) avec `charger()`, `connecter()` et `deconnecter()`. Sur une session expirée, il repasse en `deconnecte` avec le message « Votre session a expiré. Reconnectez-vous. ». Un `401` à la déconnexion vaut déconnexion. Le JWT reste dans le cookie `HttpOnly` et n'est jamais lu par le JavaScript.
+- **Ajouter une page** : une ligne dans `frontend/src/lib/routes.ts` (`chemin`, `alias`, `libelle`, `privee`, `navigation`, `ecran`), puis la branche qui rend son composant dans `App.svelte`. La navigation (`lib/components/Navigation.svelte`) lit le même tableau ; la navigation se fait par liens `<a href>` avec rechargement complet.
+
+
 ## Arrêt et reset
 
 `docker compose down` arrête les services en conservant les données.
