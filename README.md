@@ -22,7 +22,7 @@ Compose attend PostgreSQL, exécute `alembic upgrade head` dans le service `migr
 
 ## Configuration
 
-Les paramètres sont listés dans `.env.example`. Les valeurs sont factices et locales. `JWT_SECRET` est obligatoire et doit contenir au moins 32 caractères, y compris en développement et lors des migrations. `JWT_EXPIRE_MINUTES` doit être positif ; sa valeur par défaut est de 30 minutes. `ALLOWED_ORIGINS` reste à raccorder à la protection par origine. En production, le cookie JWT devra être `HttpOnly`, `SameSite=Lax` et `Secure`. `POST /api/authentification/deconnexion` exige un cookie valide, répond `204` et efface le cookie ; le JWT n’est pas révoqué côté serveur et reste valable jusqu’à son expiration.
+Les paramètres sont listés dans `.env.example`. Les valeurs sont factices et locales. `JWT_SECRET` est obligatoire et doit contenir au moins 32 caractères, y compris en développement et lors des migrations. `JWT_EXPIRE_MINUTES` doit être positif ; sa valeur par défaut est de 30 minutes. `ALLOWED_ORIGINS` liste les origines autorisées à écrire dans l’API (`POST`, `PUT`, `PATCH`, `DELETE`) : toute autre origine reçoit une `403`. Format : `http(s)://hote[:port]` séparées par des virgules, sans `/` final et sans `*` ; défaut `http://localhost:5173`. Attention : `http://127.0.0.1:5173` n’est pas `http://localhost:5173`, ouvrez le front sur `localhost` ou ajoutez l’autre origine à la liste. `ENVIRONMENT` vaut `development` (défaut) ou `production` ; toute autre valeur empêche l’API de démarrer. En production, le cookie JWT devra être `HttpOnly`, `SameSite=Lax` et `Secure`. `POST /api/authentification/deconnexion` exige un cookie valide, répond `204` et efface le cookie ; le JWT n’est pas révoqué côté serveur et reste valable jusqu’à son expiration.
 
 Les cinq routes budgets utilisent l’utilisateur authentifié par le cookie JWT via `utilisateur_courant`. Chaque lecture et modification est limitée à ses budgets ; un budget appartenant à un autre utilisateur répond `404`. Sans cookie valide, la réponse est `401`. Aucun identifiant utilisateur n’est accepté dans le corps JSON.
 
@@ -48,7 +48,7 @@ docker compose run --rm -e DATABASE_URL=postgresql+psycopg://cashmire:local-only
 docker compose run --rm --no-deps -v "$PWD/backend/tests:/app/tests:ro" -e TEST_DATABASE_URL=postgresql+psycopg://cashmire:local-only-change-me@db:5432/cashmire_test api pytest -p no:cacheprovider
 ```
 
-La création de la base ne se fait qu’une fois ; lors des exécutions suivantes, sautez cette ligne. Si les identifiants PostgreSQL de `.env` diffèrent, adaptez les deux URL. L’image backend ne contient pas les tests : la commande les monte en lecture seule. La fixture de test fixe `JWT_SECRET` et `ENVIRONMENT` avant de charger l’application.
+La création de la base ne se fait qu’une fois ; lors des exécutions suivantes, sautez cette ligne. Si les identifiants PostgreSQL de `.env` diffèrent, adaptez les deux URL. L’image backend ne contient pas les tests : la commande les monte en lecture seule. La fixture de test fixe `JWT_SECRET`, `JWT_EXPIRE_MINUTES`, `ENVIRONMENT` et `ALLOWED_ORIGINS` avant de charger l’application, et la fixture `client` envoie par défaut l’en-tête `Origin: http://localhost:5173`. Un `TestClient(app)` créé à la main doit l’ajouter lui-même, sinon ses écritures reçoivent une `403`.
 
 Pour les contrôles frontend :
 
@@ -61,6 +61,13 @@ npm run build
 ```
 
 En local hors Docker, démarrez PostgreSQL, réglez `DATABASE_URL` sur `localhost`, lancez `uvicorn app.main:app --reload` depuis `backend` et `npm run dev` depuis `frontend`. Adaptez alors la cible du proxy Vite à `http://localhost:8000`.
+
+## Frontend : navigation, client API et session
+
+- **Client API** (`frontend/src/lib/api/client.ts`) : `requeteApi` appelle `/api` en relatif avec le cookie. Toute réponse non 2xx lève une `ErreurApi` (`lib/api/erreurs.ts`) portant `status`, `code` et `champs` repris du corps `{erreur: {code, message, champs}}`. Une panne réseau lève `status: 0`, `code: 'reseau'`. Un `204` renvoie `undefined`. `surSessionExpiree(rappel)` enregistre un écouteur appelé sur tout `401`, sauf pour `/authentification/connexion`, `/inscription`, `/moi` et `/deconnexion`, où un `401` ne signifie pas qu'une session ouverte a expiré ; elle renvoie la fonction de désinscription. Le client ne redirige jamais.
+- **Store de session** (`frontend/src/lib/session.svelte.ts`) : seule source de l'utilisateur connecté (`utilisateur`, `etat`, `message`) avec `charger()`, `connecter()` et `deconnecter()`. Sur une session expirée, il repasse en `deconnecte` avec le message « Votre session a expiré. Reconnectez-vous. ». Un `401` à la déconnexion vaut déconnexion. Le JWT reste dans le cookie `HttpOnly` et n'est jamais lu par le JavaScript.
+- **Ajouter une page** : une ligne dans `frontend/src/lib/routes.ts` (`chemin`, `alias`, `libelle`, `privee`, `navigation`, `ecran`), puis la branche qui rend son composant dans `App.svelte`. La navigation (`lib/components/Navigation.svelte`) lit le même tableau ; la navigation se fait par liens `<a href>` avec rechargement complet.
+
 
 ## Arrêt et reset
 

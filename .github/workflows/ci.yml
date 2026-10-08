@@ -1,0 +1,66 @@
+name: Vérifications
+
+"on":
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_USER: cashmire_ci
+          POSTGRES_PASSWORD: ci-only-example-password
+          POSTGRES_DB: cashmire_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cashmire_ci -d cashmire_ci_test"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://cashmire_ci:ci-only-example-password@localhost:5432/cashmire_ci_test
+      TEST_DATABASE_URL: postgresql+psycopg://cashmire_ci:ci-only-example-password@localhost:5432/cashmire_ci_test
+      JWT_SECRET: ci-only-fictitious-secret-0123456789abcdef
+      JWT_EXPIRE_MINUTES: "30"
+      ALLOWED_ORIGINS: http://localhost:5173
+      ENVIRONMENT: development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.lock
+      - name: Installer les dépendances backend
+        run: python -m pip install -r backend/requirements.lock
+      - name: Appliquer les migrations sur la base de test
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Tester le backend
+        working-directory: backend
+        run: pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Installer les dépendances frontend
+        working-directory: frontend
+        run: npm ci
+      - name: Tester le frontend
+        working-directory: frontend
+        run: npm test
+      - name: Vérifier Svelte et TypeScript
+        working-directory: frontend
+        run: npm run check
+      - name: Compiler le frontend
+        working-directory: frontend
+        run: npm run build

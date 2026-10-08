@@ -57,4 +57,43 @@ describe('Cashmire health screen', () => {
     expect(await screen.findByText('Courses')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/depenses\?mois=.*limite=100&decalage=0/), expect.objectContaining({ credentials: 'include' }));
   });
+
+  it('ouvre la page des dépenses avec la liste paginée de l’API', async () => {
+    window.history.replaceState({}, '', '/depenses');
+    const json = (valeur: unknown, status = 200) => new Response(JSON.stringify(valeur), { status });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/authentification/moi')) return json({ id: 'u-1', nom_affichage: 'Alice', email: 'alice@example.test' });
+      if (url.endsWith('/categories')) return json([{ id: 'c-1', nom: 'Alimentation' }]);
+      if (url.startsWith('/api/depenses?')) return json({ elements: [{ id: 'd-1', libelle: 'Courses', montant: '12.30', date_depense: '2026-10-01', categorie: { id: 'c-1', nom: 'Alimentation' } }], total: 1 });
+      throw new Error(`Requête inattendue : ${url}`);
+    });
+    render(App);
+    expect(await screen.findByText('Courses')).toBeInTheDocument();
+    expect(screen.getByText('12,30 €')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/depenses\?mois=.*limite=10&decalage=0/), expect.objectContaining({ credentials: 'include' }));
+  });
+
+  it('ramène au formulaire de connexion quand la session expire sur les budgets', async () => {
+    window.history.replaceState({}, '', '/budgets');
+    const json = (valeur: unknown, status = 200) => new Response(JSON.stringify(valeur), { status });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/authentification/moi')) return json({ id: 'u-1', nom_affichage: 'Alice', email: 'alice@example.test' });
+      if (url.endsWith('/categories')) return json([]);
+      if (url.startsWith('/api/budgets?')) return json({ erreur: { code: 'non_authentifie', message: 'Authentification requise.' } }, 401);
+      throw new Error(`Requête inattendue : ${url}`);
+    });
+    render(App);
+    expect(await screen.findByRole('heading', { name: 'Accéder à mes budgets' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Votre session a expiré. Reconnectez-vous.');
+    expect(screen.queryByText('Bonjour, Alice')).not.toBeInTheDocument();
+  });
+
+  it('affiche le chargement de la session tant que /moi n’a pas répondu', async () => {
+    window.history.replaceState({}, '', '/budgets');
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
+    render(App);
+    expect(screen.getByRole('status')).toHaveTextContent('Chargement de votre session…');
+  });
 });
