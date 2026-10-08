@@ -180,7 +180,7 @@ La vérification est une dépendance globale de l'application (`app/core/origine
 - Un attaquant qui connaît un email peut **bloquer la connexion de ce compte jusqu'à 15 minutes** (5 échecs suffisent) et **prolonger le blocage** en espaçant ses essais : dès qu'une place se libère dans la fenêtre, un nouvel échec la reprend (simulé avec un essai toutes les 3 minutes).
 - Le JWT **n'est pas révocable** avant son expiration (30 minutes par défaut).
 - **Énumération des comptes :** `POST /inscription` répond `409` pour un email déjà inscrit (avec `champs.email`), donc révèle son existence, alors que la connexion renvoie le même `401` dans les deux cas. Compromis assumé du MVP.
-- **Secret d'exemple :** l'application accepte le `JWT_SECRET` public de `.env.example` même avec `ENVIRONMENT=production` ; un jeton forgé avec ce secret est accepté. À remplacer avant tout déploiement (garde-fou prévu avec #30).
+- **Secret d'exemple :** avec `ENVIRONMENT=production`, l'application refuse de démarrer si `JWT_SECRET` est une valeur d'exemple publique connue (celle de `.env.example`, les clés des tests et de la CI), car un jeton forgé avec elle serait accepté (issue #58). Un secret faible mais inconnu n'est pas détecté : générez-le avec `openssl rand -hex 32`.
 - La protection CSRF par vérification de l'origine est **traitée dans #11** (voir « Vérification de l'origine »), en plus de `SameSite=Lax`.
 - Sans `Origin`, la décision repose sur `Referer` (repli) : un client qui n'envoie aucun des deux est refusé.
 - Le comportement derrière un reverse proxy (réécriture de `Origin` ou de `Referer`, origine publique différente) **n'est pas traité**.
