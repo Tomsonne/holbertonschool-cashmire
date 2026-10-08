@@ -23,7 +23,9 @@ export async function toutesLesDepenses(mois: string, chargerPage: ChargerPage):
 }
 
 export function centimes(montant: string): bigint {
-  const match = /^(-?)(\d{1,10})\.(\d{2})$/.exec(montant);
+  // Pas de borne sur la taille : une somme calculée par l'API (consommation d'un budget) peut dépasser
+  // les 10 chiffres d'un montant saisi.
+  const match = /^(-?)(\d+)\.(\d{2})$/.exec(montant);
   if (!match) throw new Error('Montant invalide');
   return (match[1] === '-' ? -1n : 1n) * (BigInt(match[2]) * 100n + BigInt(match[3]));
 }

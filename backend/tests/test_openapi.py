@@ -384,3 +384,16 @@ def test_les_exemples_d_erreur_de_l_openapi_sont_les_messages_reels_de_l_api(cli
         assert reel["code"] == exemple["code"], (methode, route, statut)
         assert reel["message"] == exemple["message"], (methode, route, statut, reel["message"])
         assert set(reel.get("champs") or {}) == set(exemple.get("champs") or {}), (methode, route, statut)
+
+
+def test_les_montants_calcules_d_un_budget_ne_sont_pas_bornes_a_10_chiffres_dans_l_openapi(openapi):
+    proprietes = openapi["components"]["schemas"]["BudgetResponse"]["properties"]
+    for champ in ("depense", "reste"):
+        motif = re.compile(proprietes[champ]["pattern"])
+        for valeur in ("0.00", "19999999999.98", "-19999999899.98", "123456789012345.67"):
+            assert motif.fullmatch(valeur), (champ, valeur)
+        for valeur in ("1e2", "12.5", "12", "+5"):
+            assert not motif.fullmatch(valeur), (champ, valeur)
+    # La limite d'un budget est saisie : elle reste bornée à 10 chiffres.
+    limite = re.compile(proprietes["montant_limite"]["pattern"])
+    assert limite.fullmatch("9999999999.99") and not limite.fullmatch("12345678901.00")

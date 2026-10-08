@@ -25,8 +25,11 @@ from pydantic_core import PydanticCustomError
 _ECRITURE = re.compile(r"(-?)([0-9]+)(?:\.([0-9]+))?")
 
 
-def _exiger_chaine(valeur: Any) -> Any:
-    """Accepte une chaîne décimale (ou un Decimal construit en Python), refuse tout le reste."""
+def _controler(valeur: Any, chiffres_max: int | None) -> Any:
+    """Accepte une chaîne décimale (ou un Decimal construit en Python), refuse tout le reste.
+
+    `chiffres_max` borne la partie entière d'un montant saisi ; `None` pour un montant calculé.
+    """
     if isinstance(valeur, bool) or not isinstance(valeur, (str, Decimal)):
         raise ValueError("Le montant doit être une chaîne décimale.")
     if isinstance(valeur, str):
@@ -38,9 +41,19 @@ def _exiger_chaine(valeur: Any) -> Any:
         # déjà les messages « Deux décimales maximum. » et « Valeur trop grande/petite. ».
         if len(decimales) > 2:
             raise PydanticCustomError("decimal_max_places", "Deux décimales au plus.")
-        if len(entier) > 10:
+        if chiffres_max is not None and len(entier) > chiffres_max:
             raise PydanticCustomError("greater_than" if signe else "less_than", "Valeur hors limites.")
     return valeur
+
+
+def _exiger_chaine(valeur: Any) -> Any:
+    """Montant saisi : au plus 10 chiffres avant la virgule (limite de NUMERIC(12,2))."""
+    return _controler(valeur, 10)
+
+
+def _exiger_chaine_calculee(valeur: Any) -> Any:
+    """Montant calculé (somme, reste) : la même écriture, mais sans borne sur la taille."""
+    return _controler(valeur, None)
 
 
 # NUMERIC(12,2) accepte 10 chiffres avant la virgule : la valeur absolue doit rester sous 10^10.
@@ -88,3 +101,21 @@ Montant = Annotated[
 
 # Montant strictement positif : montant d'une dépense, limite d'un budget.
 MontantPositif = Annotated[Montant, Field(gt=0), WithJsonSchema(_SCHEMA_ENTREE_POSITIF, mode="validation")]
+
+# Montant CALCULÉ par l'API (consommation et reste d'un budget) : c'est une somme de dépenses, qui peut
+# dépasser les 10 chiffres d'un montant saisi (NUMERIC(12,2) ne borne que chaque ligne). Même écriture
+# (chaîne à 2 décimales), mais sans borne sur la taille : sinon la réponse échouait en 500.
+_SCHEMA_CALCULE = {
+    "type": "string",
+    "pattern": r"^-?[0-9]+\.[0-9]{2}$",
+    "examples": ["19999999999.98"],
+    "description": "Montant calculé en euros, chaîne décimale à exactement 2 décimales, sans borne de taille.",
+}
+MontantCalcule = Annotated[
+    Decimal,
+    BeforeValidator(_exiger_chaine_calculee),
+    Field(decimal_places=2),
+    PlainSerializer(_vers_chaine, return_type=str, when_used="json"),
+    WithJsonSchema(_SCHEMA_CALCULE, mode="validation"),
+    WithJsonSchema(_SCHEMA_CALCULE, mode="serialization"),
+]

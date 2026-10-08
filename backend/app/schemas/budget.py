@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
-from app.schemas.montant import Montant, MontantPositif
+from app.schemas.montant import MontantCalcule, MontantPositif
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 
 
@@ -72,8 +72,8 @@ class BudgetResponse(BaseModel):
     categorie: CategorieResume
     mois: str
     montant_limite: MontantPositif
-    depense: Montant
-    reste: Montant
+    depense: MontantCalcule
+    reste: MontantCalcule
     pourcentage: Decimal
     seuil_alerte_pct: int
     statut: str
