@@ -20,6 +20,7 @@ describe('Navigation', () => {
     const deconnecter = vi.fn();
     render(Navigation, { utilisateur: alice, chemin: '/synthese', deconnecter });
     expect(screen.getByRole('link', { name: 'Synthèse' })).toHaveAttribute('href', '/synthese');
+    expect(screen.getByRole('link', { name: 'Dépenses' })).toHaveAttribute('href', '/depenses');
     expect(screen.getByRole('link', { name: 'Budgets' })).toHaveAttribute('href', '/budgets');
     expect(screen.getByText('Bonjour, Alice')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Connexion' })).not.toBeInTheDocument();
