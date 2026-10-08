@@ -41,6 +41,7 @@
   a:hover { color: #9a3028; }
   [aria-current='page'] { text-decoration-thickness: 3px; text-underline-offset: 7px; }
   button { min-height: 44px; padding: 8px 12px; color: var(--ink); background: var(--ivory); border: 1px solid var(--border); border-radius: 10px; font: inherit; cursor: pointer; }
+  button:hover { color: var(--ink); background: #e5efe0; }
   :focus-visible { outline: 3px solid #754a0b; outline-offset: 3px; }
   @media (max-width: 767px) {
     .navigation { flex-wrap: wrap; padding: 8px 12px; }

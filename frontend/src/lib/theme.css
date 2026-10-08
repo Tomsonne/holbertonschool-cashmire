@@ -71,6 +71,9 @@
 }
 .cashmire-primary-action { color: var(--ivory); background: var(--ink); border: 1px solid var(--ink); }
 .cashmire-secondary-action { color: var(--ink); background: var(--ivory); border: 1px solid var(--border); }
+.cashmire-primary-action:hover:not(:disabled) { background: #213e30; border-color: #213e30; }
+.cashmire-secondary-action:hover:not(:disabled) { color: var(--ink); background: #e5efe0; }
+.cashmire-page button.danger:hover:not(:disabled) { background: #7d241d; border-color: #7d241d; }
 .cashmire-primary-action:focus-visible, .cashmire-secondary-action:focus-visible {
   outline: 3px solid #754a0b;
   outline-offset: 3px;
