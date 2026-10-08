@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { budgetsApi } from './lib/api/budgets';
-  import { chargerPageDepenses } from './lib/api/depenses';
+  import { chargerPageDepenses, depensesApi } from './lib/api/depenses';
   import { getHealth } from './lib/api/health';
   import type { Categorie, ErreurApi } from './lib/budgets';
   import BudgetManager from './lib/components/BudgetManager.svelte';
+  import DepensesManager from './lib/components/DepensesManager.svelte';
   import HealthCard from './lib/components/HealthCard.svelte';
   import MonthlyDashboard from './lib/components/MonthlyDashboard.svelte';
   import Navigation from './lib/components/Navigation.svelte';
@@ -92,6 +93,7 @@
   {#if ecran === 'pret'}
     {#if session.message}<p class="session-message" role="alert">{session.message}</p>{/if}
     {#if route.ecran === 'budgets'}<BudgetManager {categories} loadBudgets={budgetsApi.lister} createBudget={budgetsApi.creer} updateBudget={budgetsApi.modifier} deleteBudget={budgetsApi.supprimer} />
+    {:else if route.ecran === 'depenses'}<DepensesManager {categories} loadDepenses={depensesApi.lister} createDepense={depensesApi.creer} updateDepense={depensesApi.modifier} deleteDepense={depensesApi.supprimer} />
     {:else if route.ecran === 'synthese'}<MonthlyDashboard loadBudgets={budgetsApi.lister} loadExpensePage={chargerPageDepenses} />{/if}
   {:else}
     <main class="access-page cashmire-page">
