@@ -5,6 +5,7 @@ export type Utilisateur = { id: string; email: string; nom_affichage: string };
 
 export const sessionApi = {
   moi: () => requeteApi<Utilisateur>('/authentification/moi'),
+  inscrire: (email: string, mot_de_passe: string, nom_affichage: string) => requeteApi<Utilisateur>('/authentification/inscription', 'POST', { email, mot_de_passe, nom_affichage }),
   connecter: (email: string, mot_de_passe: string) => requeteApi<Utilisateur>('/authentification/connexion', 'POST', { email, mot_de_passe }),
   deconnecter: () => requeteApi<void>('/authentification/deconnexion', 'POST'),
 };

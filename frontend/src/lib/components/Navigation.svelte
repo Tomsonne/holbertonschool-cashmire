@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Utilisateur } from '../api/budgets';
-  import { CHEMIN_CONNEXION, routes, trouverRoute } from '../routes';
+  import { CHEMIN_CONNEXION, CHEMIN_INSCRIPTION, routes, trouverRoute } from '../routes';
 
   type Props = {
     utilisateur: Utilisateur | null;
@@ -24,7 +24,10 @@
     <span>Bonjour, {utilisateur.nom_affichage}</span>
     <button type="button" onclick={deconnecter}>Se déconnecter</button>
   {:else}
-    <a class="connexion" href={CHEMIN_CONNEXION}>Connexion</a>
+    <div class="acces">
+      <a href={CHEMIN_CONNEXION} aria-current={active?.chemin === CHEMIN_CONNEXION ? 'page' : undefined}>Connexion</a>
+      <a href={CHEMIN_INSCRIPTION} aria-current={active?.chemin === CHEMIN_INSCRIPTION ? 'page' : undefined}>Créer un compte</a>
+    </div>
   {/if}
 </header>
 
@@ -33,7 +36,7 @@
   .marque { display: flex; align-items: center; gap: 8px; }
   .marque strong { font: 700 27px var(--story-font); }
   nav { display: flex; gap: 16px; margin-right: auto; }
-  .connexion { margin-left: auto; }
+  .acces { display: flex; gap: 16px; margin-left: auto; }
   a { color: var(--ink); font-weight: 700; }
   a:hover { color: #9a3028; }
   [aria-current='page'] { text-decoration-thickness: 3px; text-underline-offset: 7px; }

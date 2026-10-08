@@ -1,5 +1,5 @@
 // Écran rendu par App.svelte pour une route.
-export type Ecran = 'budgets' | 'depenses' | 'synthese' | 'technique';
+export type Ecran = 'budgets' | 'depenses' | 'synthese' | 'technique' | 'connexion' | 'inscription';
 
 export type Route = {
   chemin: string;
@@ -16,10 +16,13 @@ export const routes: Route[] = [
   { chemin: '/depenses', alias: [], libelle: 'Dépenses', privee: true, navigation: true, ecran: 'depenses' },
   { chemin: '/budgets', alias: ['/'], libelle: 'Budgets', privee: true, navigation: true, ecran: 'budgets' },
   { chemin: '/etat-technique', alias: [], libelle: 'État technique', privee: false, navigation: false, ecran: 'technique' },
+  { chemin: '/connexion', alias: [], libelle: 'Connexion', privee: false, navigation: false, ecran: 'connexion' },
+  { chemin: '/inscription', alias: [], libelle: 'Créer un compte', privee: false, navigation: false, ecran: 'inscription' },
 ];
 
-// Page qui affiche le formulaire de connexion tant que l'écran dédié (#21) n'existe pas.
-export const CHEMIN_CONNEXION = '/budgets';
+// Pages publiques d'accès au compte, liées depuis la navigation d'un visiteur.
+export const CHEMIN_CONNEXION = '/connexion';
+export const CHEMIN_INSCRIPTION = '/inscription';
 
 export function trouverRoute(chemin: string): Route | undefined {
   return routes.find(route => route.chemin === chemin || route.alias.includes(chemin));
