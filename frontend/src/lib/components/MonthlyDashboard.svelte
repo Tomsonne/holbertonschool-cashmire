@@ -85,7 +85,7 @@
 <section class="dashboard cashmire-page" aria-label="Tableau de bord mensuel" aria-busy={chargement}>
   <div class="cashmire-shell">
   <header class="topbar cashmire-card"><div class="brand"><img class="cashmire-logo-image" src="/assets/cashmire/logo-emblem.png" alt="" /><strong>Cashmire</strong></div><div class="controls"><label for="dashboard-mois">Mois</label><input id="dashboard-mois" type="month" value={mois} onchange={changerMois} /><button class="cashmire-secondary-action" type="button" onclick={actualiser} disabled={chargement}>Actualiser</button></div></header>
-  {#if erreur}<div class="notice error" role="alert">{erreur} <button type="button" onclick={actualiser}>Réessayer</button></div>{/if}
+  {#if erreur}<div class="notice error" role="alert">{erreur} <button class="cashmire-primary-action" type="button" onclick={actualiser}>Réessayer</button></div>{/if}
   {#if chargement}<p role="status">Chargement du tableau de bord…</p>
   {:else if !erreur}
     <section class="hero cashmire-hero">

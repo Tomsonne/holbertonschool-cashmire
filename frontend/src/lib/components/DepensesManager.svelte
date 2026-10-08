@@ -269,9 +269,6 @@
     font: 700 14px var(--body-font);
     cursor: pointer;
   }
-  /* style.css colore tout bouton survolé en vert foncé : on garde le texte lisible. */
-  button.cashmire-secondary-action:hover:not(:disabled) { color: var(--ink); background: #e5efe0; }
-  button.danger:hover:not(:disabled) { background: #7d241d; border-color: #7d241d; }
   :focus-visible { outline: 3px solid #754a0b; outline-offset: 3px; }
 
   .notice { margin: 12px 0; padding: 12px; border-radius: 12px; }

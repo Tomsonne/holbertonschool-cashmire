@@ -109,8 +109,6 @@
   input[aria-invalid='true'], select[aria-invalid='true'] { border-color: #922514; }
   :focus-visible { outline: 3px solid #754a0b; outline-offset: 3px; }
   button:disabled { opacity: .55; cursor: not-allowed; }
-  /* style.css colore tout bouton survolé en vert foncé : on garde le texte lisible. */
-  button.cashmire-secondary-action:hover:not(:disabled) { color: var(--ink); background: #e5efe0; }
   .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
   .field-error { margin: 4px 0 0; color: #922514; }
   .notice { margin: 0 0 8px; padding: 12px; border-radius: 12px; }
