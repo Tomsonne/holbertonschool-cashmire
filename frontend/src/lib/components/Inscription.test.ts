@@ -64,6 +64,23 @@ describe('Formulaire d’inscription', () => {
     await waitFor(() => expect(motDePasse).toHaveFocus());
   });
 
+  it('relie l’erreur d’e-mail à son champ et place le focus dessus', async () => {
+    const erreur = creerErreurApi('Données invalides.', 422, 'donnees_invalides', {
+      email: 'Adresse e-mail invalide.',
+    });
+    render(Inscription, { inscrire: vi.fn().mockRejectedValue(erreur) });
+    await remplirEtEnvoyer();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Vérifiez les champs du formulaire.');
+
+    const email = screen.getByLabelText('Adresse e-mail');
+    expect(email).toHaveAttribute('aria-invalid', 'true');
+    expect(email.getAttribute('aria-describedby')?.split(' ')).toContain('inscription-email-erreur');
+    expect(email).toHaveAccessibleDescription('Adresse e-mail invalide.');
+    expect(screen.getByLabelText('Mot de passe')).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByLabelText(NOM)).not.toHaveAttribute('aria-invalid');
+    await waitFor(() => expect(email).toHaveFocus());
+  });
+
   it('désactive le bouton pendant la requête', async () => {
     let terminer!: () => void;
     render(Inscription, { inscrire: vi.fn().mockReturnValue(new Promise<void>(resoudre => { terminer = resoudre; })) });
