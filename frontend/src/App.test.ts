@@ -57,4 +57,20 @@ describe('Cashmire health screen', () => {
     expect(await screen.findByText('Courses')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/depenses\?mois=.*limite=100&decalage=0/), expect.objectContaining({ credentials: 'include' }));
   });
+
+  it('ramène au formulaire de connexion quand la session expire sur les budgets', async () => {
+    window.history.replaceState({}, '', '/budgets');
+    const json = (valeur: unknown, status = 200) => new Response(JSON.stringify(valeur), { status });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/authentification/moi')) return json({ id: 'u-1', nom_affichage: 'Alice', email: 'alice@example.test' });
+      if (url.endsWith('/categories')) return json([]);
+      if (url.startsWith('/api/budgets?')) return json({ erreur: { code: 'non_authentifie', message: 'Authentification requise.' } }, 401);
+      throw new Error(`Requête inattendue : ${url}`);
+    });
+    render(App);
+    expect(await screen.findByRole('heading', { name: 'Accéder à mes budgets' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Votre session a expiré. Reconnectez-vous.');
+    expect(screen.queryByText('Bonjour, Alice')).not.toBeInTheDocument();
+  });
 });
