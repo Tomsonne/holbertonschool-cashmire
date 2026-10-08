@@ -1,3 +1,5 @@
+import type { ErreurApi } from './api/erreurs';
+
 export type Categorie = { id: string; nom: string };
 
 export type Budget = {
@@ -12,10 +14,7 @@ export type Budget = {
   statut: 'ok' | 'attention' | 'depasse';
 };
 
-export type ErreurApi = Error & {
-  status?: number;
-  champs?: Record<string, string>;
-};
+export type { ErreurApi };
 
 export function messageErreur(error: unknown): string {
   const apiError = error as ErreurApi;
