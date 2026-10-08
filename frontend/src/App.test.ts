@@ -73,4 +73,11 @@ describe('Cashmire health screen', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Votre session a expiré. Reconnectez-vous.');
     expect(screen.queryByText('Bonjour, Alice')).not.toBeInTheDocument();
   });
+
+  it('affiche le chargement de la session tant que /moi n’a pas répondu', async () => {
+    window.history.replaceState({}, '', '/budgets');
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
+    render(App);
+    expect(screen.getByRole('status')).toHaveTextContent('Chargement de votre session…');
+  });
 });
