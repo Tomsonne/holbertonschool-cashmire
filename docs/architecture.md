@@ -15,14 +15,14 @@ flowchart LR
 ## Backend
 
 - `app/main.py` crée FastAPI et monte les routes sous `/api`.
-- `app/core/` charge les paramètres d’environnement.
+- `app/core/` : paramètres d’environnement validés, sécurité (hachage Argon2id, JWT), `utilisateur_courant`, format d’erreur unique et gestionnaires, limiteur de connexion, vérification de l’origine des écritures et documentation OpenAPI (`openapi.py`).
 - `app/db/` contient la base déclarative, le moteur et les sessions SQLAlchemy.
 - `app/models/` représente les tables PostgreSQL ; les montants Python sont `Decimal`.
 - `app/schemas/` contient les contrats Pydantic.
-- `app/routes/` expose la santé, l’inscription, la connexion et les routes de création, consultation, modification et suppression des budgets.
-- `app/services/` contient la vérification légère de la DB, les règles métier de l’authentification et des budgets, ainsi que les calculs de consommation des budgets.
+- `app/routes/` expose la santé, l’authentification (inscription, connexion, déconnexion, utilisateur connecté), les catégories (lecture seule), les dépenses et les budgets.
+- `app/services/` contient la vérification légère de la DB, les règles métier de l’authentification, des catégories, des dépenses et des budgets, ainsi que le calcul de consommation des budgets.
 - `migrations/` fait évoluer la base par Alembic. Aucun `create_all()`.
-- `tests/` couvre la santé, l’authentification et les budgets, y compris leurs erreurs et l’isolation des utilisateurs.
+- `tests/` couvre la santé, l’authentification, les catégories, les dépenses, les budgets, le format d’erreur, la vérification d’origine, l’isolation entre utilisateurs, l’OpenAPI et la cohérence des documents avec le code (plus de 400 tests).
 
 ## Frontend
 
@@ -33,14 +33,18 @@ flowchart LR
 - `src/*.test.ts` teste l’interface avec Vitest et Testing Library.
 - Vite cible `api:8000` côté réseau Compose. Les appels navigateur restent relatifs à l’origine.
 
+## Intégration continue
+
+`.github/workflows/ci.yml` s’exécute sur chaque pull request vers `main` : PostgreSQL éphémère, migrations, tests backend, puis tests frontend, vérification Svelte/TypeScript et build. Elle informe ; elle ne bloque la fusion que si la protection de la branche exige son résultat.
+
 ## Démarrage
 
 Compose attend `pg_isready`, lance le service ponctuel `migrate`, attend sa réussite puis démarre l’API. Le frontend attend le health check de l’API. Le volume nommé `postgres_data` conserve les données. Alembic applique uniquement les versions manquantes.
 
 ## Points d’extension
 
-- Authentification : inscription, connexion, `/moi` et dépendance `utilisateur_courant` en place ; la déconnexion reste à développer.
-- Dépenses : route, validation, service et tests ; filtrage par utilisateur connecté.
+- Authentification : inscription, connexion, déconnexion, `/moi` et dépendance `utilisateur_courant` en place ; le JWT n’est pas révocable côté serveur.
+- Dépenses : création, liste paginée et filtrée, détail, modification et suppression, toutes filtrées par utilisateur connecté.
 - Budgets : routes et calculs en `Decimal` depuis les dépenses persistées, filtrés par `utilisateur_courant`.
 
 Les autres extensions seront ajoutées au fil des issues.

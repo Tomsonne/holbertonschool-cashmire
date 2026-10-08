@@ -1,9 +1,10 @@
+import re
 from decimal import Decimal
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from app.core.gestionnaires import installer_gestionnaires
 from app.schemas.montant import Montant, MontantPositif
@@ -121,3 +122,57 @@ def test_entree_non_numerique_est_refusee(client, valeur):
     reponse = client.post("/depenses", json={"montant": valeur})
     assert reponse.status_code == 422
     assert "montant" in reponse.json()["erreur"]["champs"]
+
+
+# --- Contrat strict : seules les écritures annoncées sont acceptées ----------------------------
+
+
+@pytest.mark.parametrize(
+    "valeur",
+    ["1e2", "1E1", "+5", " 12.5", "12.5 ", "12.", ".5", "1_000", "١٢.٥٠", "٣", "12.5e0", "0x10"],
+)
+def test_ecritures_non_decimales_sont_refusees(client, valeur):
+    # Pydantic accepterait toutes ces chaînes ; le contrat de l'API n'annonce que « 12.50 ».
+    reponse = client.post("/depenses", json={"montant": valeur})
+    assert reponse.status_code == 422
+    assert reponse.json()["erreur"]["champs"] == {"montant": "Valeur invalide."}
+
+
+def test_zeros_de_fin_au_dela_de_deux_decimales_sont_refuses(client):
+    reponse = client.post("/depenses", json={"montant": "12.500"})
+    assert reponse.status_code == 422
+    assert reponse.json()["erreur"]["champs"] == {"montant": "Deux décimales maximum."}
+
+
+def test_plus_de_dix_chiffres_avant_la_virgule_sont_refuses_meme_avec_des_zeros_devant(client):
+    reponse = client.post("/depenses", json={"montant": "0000000000000001"})
+    assert reponse.status_code == 422
+    assert reponse.json()["erreur"]["champs"] == {"montant": "Valeur trop grande."}
+
+
+@pytest.mark.parametrize("valeur", ["12", "12.5", "12.50", "0012.50", "0.01", "9999999999.99"])
+def test_ecritures_annoncees_restent_acceptees(client, valeur):
+    assert client.post("/depenses", json={"montant": valeur}).status_code == 200
+
+
+def test_le_motif_publie_dans_l_openapi_correspond_exactement_a_la_validation():
+    """Ce que le contrat annonce (motif de l'OpenAPI) = ce que l'API accepte vraiment."""
+    schema = TypeAdapter(MontantPositif).json_schema(mode="validation")
+    motif = re.compile(schema["pattern"])
+    validateur = TypeAdapter(MontantPositif)
+    # Valeurs strictement positives seulement : « 0 » correspond au motif mais est refusé à part.
+    echantillon = [
+        "12", "12.5", "12.50", "0012.50", "0.01", "9999999999.99", "1", "01.5", "5.00",
+        "1e2", "1E1", "+5", " 1", "1 ", "12.", ".5", "1_000", "12.500", "12.345",
+        "0000000000000001", "10000000000", "99999999999", "abc", "", "12,50", "-5",
+        "١٢.٥٠", "٣", "1.", "..", "1.2.3", "NaN", "Infinity",
+    ]
+    for valeur in echantillon:
+        try:
+            validateur.validate_python(valeur)
+            accepte = True
+        except ValidationError:
+            accepte = False
+        assert accepte == bool(motif.fullmatch(valeur)), (
+            f"{valeur!r} : validation={accepte}, motif publié={bool(motif.fullmatch(valeur))}"
+        )

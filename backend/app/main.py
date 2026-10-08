@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI
 from app.core.gestionnaires import installer_gestionnaires
 from app.core.origine import verifier_origine
+from app.core.openapi import personnaliser_openapi
 from app.routes.authentification import router as authentification_router
 from app.routes.budgets import router as budgets_router
 from app.routes.categories import router as categories_router
@@ -15,3 +16,4 @@ app.include_router(authentification_router, prefix="/api/authentification", tags
 app.include_router(budgets_router, prefix="/api", tags=["budgets"])
 app.include_router(categories_router, prefix="/api/categories", tags=["categories"])
 app.include_router(depenses_router, prefix="/api/depenses", tags=["depenses"])
+personnaliser_openapi(app)

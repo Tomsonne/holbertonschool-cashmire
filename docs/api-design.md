@@ -6,12 +6,15 @@ Les montants sont des **chaînes décimales** (`"12.50"`) pour éviter toute per
 - **en entrée**, une chaîne avec 2 décimales au plus et 10 chiffres au plus avant la virgule (comme `NUMERIC(12,2)`) ; un nombre JSON (`12.5`), une valeur à 3 décimales (`"12.345"`) ou trop grande est refusé en `422` au lieu d'être arrondi ou de faire échouer l'insertion en base ;
 - dans le code, les schémas utilisent `Montant` (négatif possible, par exemple un `reste`) ou `MontantPositif` (`app/schemas/montant.py`).
 Seule exception de langue : `/api/health`, nom conventionnel des routes de supervision.
+La documentation interactive (OpenAPI) est servie sur `/docs` et `/openapi.json` ; les tests (`backend/tests/test_openapi.py`) vérifient que ce document, l'OpenAPI et le code décrivent exactement les mêmes routes et les mêmes codes d'erreur.
 
 ## Format d'erreur unique
 ```json
 { "erreur": { "code": "donnees_invalides", "message": "Le montant doit être supérieur à 0.", "champs": { "montant": "doit être > 0" } } }
 ```
 `champs` est optionnel. Jamais de stack trace ni de détail SQL.
+
+**Seule exception :** `GET /api/health` renvoie son propre format, `{"statut": "degrade", "base_de_donnees": "indisponible"}` avec le statut `503`, quand la base est injoignable (voir « Système »).
 
 | Statut | `code` | Quand |
 |---|---|---|
@@ -57,7 +60,7 @@ La colonne **Connexion requise** indique si l'utilisateur doit être authentifi�
 **Inscription :** la réponse `201` contient `{id, email, nom_affichage, date_creation}` ; jamais de mot de passe ni de hash. L'email est normalisé (espaces retirés, minuscules) ; l'unicité est insensible à la casse. **L'inscription ne connecte pas l'utilisateur** : aucun cookie ni JWT n'est émis, il faut appeler `/connexion` ensuite. Le mot de passe est haché avec Argon2id.
 
 **Connexion :** l'email est normalisé comme à l'inscription. Le mot de passe n'a **aucun minimum** ni règle de composition (la politique de 10 à 128 caractères ne vaut qu'à l'inscription) : seul le maximum de 128 caractères est contrôlé (`422` au-delà). Un mot de passe de 9 caractères est donc simplement incorrect : `401`, pas `422`. Il n'est jamais nettoyé ni tronqué.
-- **Cookie :** `access_token`, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age` de 30 minutes, `Secure` seulement en production. Le jeton n'apparaît jamais dans le corps JSON. Le JWT (HS256) contient `sub` (identifiant de l'utilisateur), `iat` et `exp`. Durée de vie : **30 minutes, sans refresh token** (`JWT_EXPIRE_MINUTES`, strictement positif) ; la même valeur fixe `exp` et `Max-Age`.
+- **Cookie :** `access_token`, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Max-Age` de 30 minutes par défaut (`JWT_EXPIRE_MINUTES`), `Secure` seulement en production. Le jeton n'apparaît jamais dans le corps JSON. Le JWT (HS256) contient `sub` (identifiant de l'utilisateur), `iat` et `exp`. Durée de vie : **30 minutes, sans refresh token** (`JWT_EXPIRE_MINUTES`, strictement positif) ; la même valeur fixe `exp` et `Max-Age`.
 - **`401` :** `{"erreur": {"code": "non_authentifie", "message": "Email ou mot de passe incorrect."}}`, sans `champs`, identique pour un email inconnu et un mauvais mot de passe. Un email inconnu déclenche quand même une vérification Argon2 (contre un hash factice) pour ne pas se distinguer par le temps de réponse.
 - **`429` :** après **5 échecs en 15 minutes pour un même email** (normalisé, inconnus compris), toute tentative suivante répond `{"erreur": {"code": "trop_de_tentatives", "message": "Trop de tentatives, réessayez plus tard."}}`, sans `Retry-After`. Le contrôle précède tout calcul Argon2 ; seuls les échecs comptent ; une connexion réussie remet le compteur à zéro. Le compteur est **en mémoire**.
 - **Clé de signature :** `JWT_SECRET` est obligatoire (32 caractères au moins, aucune valeur par défaut), y compris en développement et pour `migrate`, car la configuration est chargée à chaque démarrage.
@@ -76,9 +79,9 @@ Les catégories sont prédéfinies, communes à tous et en lecture seule : il n'
 |---|---|---|---|---|---|
 | GET | `/api/depenses?mois=AAAA-MM&categorie_id=&limite=&decalage=` | Oui | | `200 {elements, total}` triées par date décroissante | 401, 422 |
 | POST | `/api/depenses` | Oui | `{montant, libelle, date_depense, categorie_id}` | `201 {id, montant, libelle, date_depense, categorie: {id, nom}}` | 401, 404 catégorie inconnue, 422 |
-| GET | `/api/depenses/{id}` | Oui | | `200` dépense | 401, 404 |
+| GET | `/api/depenses/{id}` | Oui | | `200` dépense | 401, 404, 422 identifiant mal formé |
 | PATCH | `/api/depenses/{id}` | Oui | champs à modifier | `200` dépense modifiée | 401, 404, 422 |
-| DELETE | `/api/depenses/{id}` | Oui | | `204` | 401, 404 |
+| DELETE | `/api/depenses/{id}` | Oui | | `204` | 401, 404, 422 identifiant mal formé |
 
 **Règles de `POST /api/depenses` :**
 - `montant` : `MontantPositif` (chaîne, strictement positif, 2 décimales au plus). Un nombre JSON, `0`, un négatif ou 3 décimales : 422.
@@ -124,9 +127,9 @@ Précisions :
 |---|---|---|---|---|---|
 | GET | `/api/budgets?mois=AAAA-MM` | Oui | | `200` liste avec consommation : `{id, categorie, mois, montant_limite, depense, reste, pourcentage, seuil_alerte_pct, statut}` | 401, 422 |
 | POST | `/api/budgets` | Oui | `{categorie_id, montant_limite, mois, seuil_alerte_pct?}` | `201` budget avec consommation | 401, 404 catégorie inconnue, 409 budget déjà existant ce mois, 422 |
-| GET | `/api/budgets/{id}` | Oui | | `200` un budget avec sa consommation | 401, 404 |
+| GET | `/api/budgets/{id}` | Oui | | `200` un budget avec sa consommation | 401, 404, 422 identifiant mal formé |
 | PATCH | `/api/budgets/{id}` | Oui | `{montant_limite?, seuil_alerte_pct?}` | `200` budget modifié avec consommation | 401, 404, 422 |
-| DELETE | `/api/budgets/{id}` | Oui | | `204` | 401, 404 |
+| DELETE | `/api/budgets/{id}` | Oui | | `204` | 401, 404, 422 identifiant mal formé |
 
 `statut` ∈ `ok | attention | depasse` (règle de calcul dans `data-model.md`).
 
@@ -160,6 +163,8 @@ Toute requête `POST`, `PUT`, `PATCH` ou `DELETE` vers une route existante est c
 
 Refus : `403 {"erreur": {"code": "origine_refusee", "message": "Origine non autorisée."}}`, sans `champs`.
 
+Conséquence pour la documentation interactive : `/docs` est servie par l'API (origine `http://localhost:8000`), qui n'est pas dans `ALLOWED_ORIGINS` par défaut ; ses essais d'écriture reçoivent `403` tant qu'on ne l'ajoute pas (voir le README).
+
 La vérification est une dépendance globale de l'application (`app/core/origine.py`, enregistrée par `FastAPI(dependencies=[...])`) : elle s'exécute avant l'authentification, la validation du corps et la route. Une écriture d'origine refusée répond donc `403` même sans cookie ou avec des données invalides (au lieu de `401` ou `422`), et une connexion refusée n'incrémente jamais le compteur de tentatives. Exceptions : une route inconnue répond toujours `404` (la dépendance n'est pas appelée), et un corps qui n'est pas du JSON valide répond `400`, car FastAPI le décode avant d'appeler les dépendances. Aucun `CORSMiddleware` n'est installé : le front appelle `/api` par le proxy Vite, donc depuis la même origine.
 
 `ALLOWED_ORIGINS` est une liste séparée par des virgules (espaces tolérés autour) ; chaque entrée a la forme `http(s)://hote[:port]`, sans chemin, sans `/` final, jamais `*`. Défaut : `http://localhost:5173`. Une liste vide ou une entrée invalide empêche l'application (et `alembic`) de démarrer ; le message d'erreur ne recopie pas la valeur. De même, `ENVIRONMENT` n'accepte que `development` ou `production`.
@@ -170,8 +175,11 @@ La vérification est une dépendance globale de l'application (`app/core/origine
 
 ## Limites connues (connexion, issue #8)
 - Le compteur de tentatives est **par worker uvicorn** et disparaît au redémarrage.
-- Un attaquant qui connaît un email peut **bloquer temporairement** la connexion de ce compte (5 échecs suffisent pendant 15 minutes).
-- Le JWT **n'est pas révocable** avant son expiration (30 minutes).
+- Un attaquant qui connaît un email peut **bloquer la connexion de ce compte jusqu'à 15 minutes** (5 échecs suffisent) et **prolonger le blocage** en espaçant ses essais : dès qu'une place se libère dans la fenêtre, un nouvel échec la reprend (simulé avec un essai toutes les 3 minutes).
+- Le JWT **n'est pas révocable** avant son expiration (30 minutes par défaut).
+- **Énumération des comptes :** `POST /inscription` répond `409` pour un email déjà inscrit (avec `champs.email`), donc révèle son existence, alors que la connexion renvoie le même `401` dans les deux cas. Compromis assumé du MVP.
+- **Secret d'exemple :** l'application accepte le `JWT_SECRET` public de `.env.example` même avec `ENVIRONMENT=production` ; un jeton forgé avec ce secret est accepté. À remplacer avant tout déploiement (garde-fou prévu avec #30).
+- **Consommation de budget très élevée :** une somme de dépenses supérieure à 9 999 999 999,99 provoque une `500` à la lecture du budget (la borne des montants s'applique aussi aux sommes calculées). Bug connu.
 - La protection CSRF par vérification de l'origine est **traitée dans #11** (voir « Vérification de l'origine »), en plus de `SameSite=Lax`.
 - Sans `Origin`, la décision repose sur `Referer` (repli) : un client qui n'envoie aucun des deux est refusé.
 - Le comportement derrière un reverse proxy (réécriture de `Origin` ou de `Referer`, origine publique différente) **n'est pas traité**.
