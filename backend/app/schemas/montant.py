@@ -11,16 +11,35 @@ Règles :
 FastAPI renvoie un nombre JSON (12.5) et la règle n'est plus respectée.
 """
 
+import re
 from decimal import Decimal
 from typing import Annotated, Any
 
 from pydantic import BeforeValidator, Field, PlainSerializer, WithJsonSchema
+from pydantic_core import PydanticCustomError
+
+
+# Écriture décimale admise : chiffres 0-9, signe « - » facultatif, point et décimales facultatifs.
+# Pydantic accepterait bien davantage (« 1e2 », « +5 », « 12. », « .5 », « 1_000 », des espaces,
+# des chiffres d'autres alphabets) : ces écritures ne sont pas annoncées par le contrat de l'API.
+_ECRITURE = re.compile(r"(-?)([0-9]+)(?:\.([0-9]+))?")
 
 
 def _exiger_chaine(valeur: Any) -> Any:
-    """Accepte une chaîne (ou un Decimal construit en Python), refuse les nombres JSON."""
+    """Accepte une chaîne décimale (ou un Decimal construit en Python), refuse tout le reste."""
     if isinstance(valeur, bool) or not isinstance(valeur, (str, Decimal)):
         raise ValueError("Le montant doit être une chaîne décimale.")
+    if isinstance(valeur, str):
+        trouve = _ECRITURE.fullmatch(valeur)
+        if trouve is None:
+            raise ValueError("Le montant doit être une chaîne décimale.")
+        signe, entier, decimales = trouve.group(1), trouve.group(2), trouve.group(3) or ""
+        # Les types d'erreur ci-dessous sont ceux de Pydantic : les gestionnaires leur associent
+        # déjà les messages « Deux décimales maximum. » et « Valeur trop grande/petite. ».
+        if len(decimales) > 2:
+            raise PydanticCustomError("decimal_max_places", "Deux décimales au plus.")
+        if len(entier) > 10:
+            raise PydanticCustomError("greater_than" if signe else "less_than", "Valeur hors limites.")
     return valeur
 
 
@@ -42,7 +61,7 @@ _DESCRIPTION_ENTREE = (
 )
 _SCHEMA_ENTREE = {
     "type": "string",
-    "pattern": r"^\d{1,10}(\.\d{1,2})?$",
+    "pattern": r"^[0-9]{1,10}(\.[0-9]{1,2})?$",
     "examples": ["12.50"],
     "description": _DESCRIPTION_ENTREE,
 }
@@ -52,7 +71,7 @@ _SCHEMA_ENTREE_POSITIF = {
 }
 _SCHEMA_SORTIE = {
     "type": "string",
-    "pattern": r"^-?\d{1,10}\.\d{2}$",
+    "pattern": r"^-?[0-9]{1,10}\.[0-9]{2}$",
     "examples": ["12.50"],
     "description": "Montant en euros, chaîne décimale à exactement 2 décimales (jamais un nombre).",
 }

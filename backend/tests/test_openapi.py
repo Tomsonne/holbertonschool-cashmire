@@ -12,6 +12,7 @@ La CI, qui exécute les tests depuis le dépôt, les lance toujours.
 
 import importlib.util
 import re
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -229,6 +230,39 @@ def test_les_codes_d_erreur_de_api_design_sont_ceux_du_code():
     assert documentes == CODES_PAR_STATUT
 
 
+def test_les_erreurs_listees_par_route_dans_api_design_sont_celles_de_l_openapi(openapi):
+    """La colonne « Erreurs » du contrat doit lister les mêmes statuts que l'OpenAPI, route par route.
+
+    Les statuts généraux (400 corps illisible, 403 origine, 500) sont décrits dans les sections
+    transverses du document ; seuls les statuts propres à une route figurent dans le tableau.
+    """
+    statuts_de_route = {401, 404, 409, 422, 429, 503}
+    reelles = {
+        (methode, _normaliser(chemin)): {int(s) for s in openapi["paths"][chemin][methode.lower()]["responses"]}
+        for methode, chemin in _routes_de_l_api()
+    }
+    verifiees = 0
+    for ligne in _lire_doc("api-design.md").splitlines():
+        trouve = re.match(r"^\| (GET|POST|PUT|PATCH|DELETE) \| `(/api[^`]*)` \|", ligne)
+        if not trouve:
+            continue
+        cle = (trouve.group(1), _normaliser(trouve.group(2).split("?")[0]))
+        colonne_erreurs = [c.strip() for c in ligne.strip().strip("|").split("|")][-1]
+        documentes = {int(code) for code in re.findall(r"\b([45]\d\d)\b", colonne_erreurs)}
+        assert documentes == reelles[cle] & statuts_de_route, (
+            f"{cle} : le contrat liste {sorted(documentes)}, l'OpenAPI {sorted(reelles[cle] & statuts_de_route)}"
+        )
+        verifiees += 1
+    assert verifiees == 16
+
+
+def test_les_presentations_signalent_l_exception_de_health_et_le_repli_sur_referer(openapi):
+    description = openapi["info"]["description"]
+    assert "GET /api/health" in description and "propre format" in description
+    assert "Referer" in description
+    assert "par défaut" in description  # la durée du JWT est un réglage, pas une constante
+
+
 def _tables_du_diagramme(texte: str) -> dict[str, set[str]]:
     tables: dict[str, set[str]] = {}
     courante = None
@@ -262,3 +296,91 @@ def test_les_six_categories_de_data_model_sont_celles_de_la_migration():
     assert len(noms) == 6
     for nom in noms:
         assert nom in texte, nom
+
+
+# === Exemples d'erreur : les messages documentés sont les messages réels =======================
+
+
+def _exemple(openapi, methode, chemin, statut):
+    reponse = openapi["paths"][chemin][methode.lower()]["responses"][str(statut)]
+    return reponse["content"]["application/json"]["example"]["erreur"]
+
+
+def test_les_descriptions_de_reponse_sont_en_francais(openapi):
+    texte = str(openapi["paths"])
+    for anglais in ("Successful Response", "Validation Error", "Service Unavailable"):
+        assert anglais not in texte, anglais
+
+
+def test_les_exemples_d_erreur_de_l_openapi_sont_les_messages_reels_de_l_api(client, openapi):
+    inconnu = "00000000-0000-4000-8000-000000000000"
+    inscription = "/api/authentification/inscription"
+    connexion = "/api/authentification/connexion"
+    identifiants = {"email": "ada@example.com", "mot_de_passe": "un-mot-de-passe-long"}
+    cas = []  # (méthode, route documentée, statut attendu, réponse réelle)
+
+    # Sans connexion
+    cas.append(("GET", "/api/depenses", 401, client.get("/api/depenses")))
+    cas.append(("POST", connexion, 400, client.post(
+        connexion, content="{pas du json", headers={"Content-Type": "application/json"})))
+    cas.append(("POST", connexion, 403, client.post(
+        connexion, json=identifiants, headers={"Origin": "http://autre-site.example"})))
+    cas.append(("POST", connexion, 401, client.post(connexion, json=identifiants)))
+    cas.append(("POST", connexion, 422, client.post(
+        connexion, json={"email": "pas-un-email", "mot_de_passe": "x"})))
+    cas.append(("POST", inscription, 422, client.post(
+        inscription, json={**identifiants, "email": "pas-un-email", "nom_affichage": "Ada"})))
+    for _ in range(5):
+        client.post(connexion, json={"email": "bloque@example.com", "mot_de_passe": "x"})
+    cas.append(("POST", connexion, 429, client.post(
+        connexion, json={"email": "bloque@example.com", "mot_de_passe": "x"})))
+
+    # Inscription en double, puis connexion
+    assert client.post(inscription, json={**identifiants, "nom_affichage": "Ada"}).status_code == 201
+    cas.append(("POST", inscription, 409, client.post(
+        inscription, json={**identifiants, "nom_affichage": "Ada"})))
+    assert client.post(connexion, json=identifiants).status_code == 200
+    categorie = client.get("/api/categories").json()[0]["id"]
+    aujourd_hui = date.today().isoformat()
+    depense = {"montant": "1.00", "libelle": "x", "date_depense": aujourd_hui, "categorie_id": inconnu}
+    budget = {"categorie_id": inconnu, "montant_limite": "10.00", "mois": "2026-10"}
+
+    # Connecté : ressources inconnues
+    cas.append(("POST", "/api/depenses", 404, client.post("/api/depenses", json=depense)))
+    cas.append(("POST", "/api/budgets", 404, client.post("/api/budgets", json=budget)))
+    cas.append(("GET", "/api/depenses/{depense_id}", 404, client.get(f"/api/depenses/{inconnu}")))
+    cas.append(("PATCH", "/api/depenses/{depense_id}", 404, client.patch(
+        f"/api/depenses/{inconnu}", json={"libelle": "x"})))
+    cas.append(("DELETE", "/api/depenses/{depense_id}", 404, client.delete(f"/api/depenses/{inconnu}")))
+    cas.append(("GET", "/api/budgets/{budget_id}", 404, client.get(f"/api/budgets/{inconnu}")))
+    cas.append(("PATCH", "/api/budgets/{budget_id}", 404, client.patch(
+        f"/api/budgets/{inconnu}", json={"seuil_alerte_pct": 50})))
+    cas.append(("DELETE", "/api/budgets/{budget_id}", 404, client.delete(f"/api/budgets/{inconnu}")))
+    valide = {"categorie_id": categorie, "montant_limite": "10.00", "mois": "2026-10"}
+    assert client.post("/api/budgets", json=valide).status_code == 201
+    cas.append(("POST", "/api/budgets", 409, client.post("/api/budgets", json=valide)))
+
+    # Connecté : données invalides (la validation passe avant la recherche de la ressource)
+    cas.append(("GET", "/api/depenses", 422, client.get("/api/depenses", params={"limite": 500})))
+    cas.append(("GET", "/api/depenses/{depense_id}", 422, client.get("/api/depenses/pas-un-uuid")))
+    cas.append(("DELETE", "/api/depenses/{depense_id}", 422, client.delete("/api/depenses/pas-un-uuid")))
+    cas.append(("POST", "/api/depenses", 422, client.post(
+        "/api/depenses", json={**depense, "categorie_id": categorie, "montant": "0"})))
+    cas.append(("PATCH", "/api/depenses/{depense_id}", 422, client.patch(
+        f"/api/depenses/{inconnu}", json={"montant": "0"})))
+    cas.append(("GET", "/api/budgets", 422, client.get("/api/budgets", params={"mois": "2026-13"})))
+    cas.append(("GET", "/api/budgets/{budget_id}", 422, client.get("/api/budgets/pas-un-uuid")))
+    cas.append(("DELETE", "/api/budgets/{budget_id}", 422, client.delete("/api/budgets/pas-un-uuid")))
+    cas.append(("POST", "/api/budgets", 422, client.post(
+        "/api/budgets", json={**valide, "montant_limite": "0"})))
+    cas.append(("PATCH", "/api/budgets/{budget_id}", 422, client.patch(
+        f"/api/budgets/{inconnu}", json={"seuil_alerte_pct": 500})))
+
+    assert len(cas) == 27  # garde-fou : tous les cas ci-dessus ont bien été construits
+    for methode, route, statut, reponse in cas:
+        assert reponse.status_code == statut, (methode, route, statut, reponse.text)
+        reel = reponse.json()["erreur"]
+        exemple = _exemple(openapi, methode, route, statut)
+        assert reel["code"] == exemple["code"], (methode, route, statut)
+        assert reel["message"] == exemple["message"], (methode, route, statut, reel["message"])
+        assert set(reel.get("champs") or {}) == set(exemple.get("champs") or {}), (methode, route, statut)

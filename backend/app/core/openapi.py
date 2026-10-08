@@ -32,8 +32,8 @@ DESCRIPTION = """\
 API de **Cashmire** : suivi de dépenses personnelles et de budgets mensuels par catégorie (euros).
 
 ## Authentification
-Le jeton est un **JWT** (HS256) porté par le cookie `access_token` (`HttpOnly`, `SameSite=Lax`, 30 minutes,
-`Secure` en production). `POST /api/authentification/connexion` le pose ; il n'apparaît jamais dans un
+Le jeton est un **JWT** (HS256) porté par le cookie `access_token` (`HttpOnly`, `SameSite=Lax`, 30 minutes par défaut grâce à
+`JWT_EXPIRE_MINUTES`, `Secure` en production). `POST /api/authentification/connexion` le pose ; il n'apparaît jamais dans un
 corps JSON. Les routes marquées d'un cadenas exigent ce cookie, sinon `401`.
 
 Depuis cette page : appelez d'abord `/connexion` ; le navigateur garde le cookie et le renvoie aux appels
@@ -49,9 +49,11 @@ Toujours des **chaînes décimales** (`"12.50"`), jamais des nombres JSON : à l
 ## Erreurs
 Format unique : `{"erreur": {"code": "...", "message": "...", "champs": {"champ": "..."}}}` (`champs`
 est facultatif). Jamais de trace ni de détail SQL. La valeur envoyée n'est jamais renvoyée.
+Seule exception : `GET /api/health`, qui renvoie son propre format (`503`) quand la base est injoignable.
+Une route inconnue répond `404` (`introuvable`) et une méthode non prévue pour une route `405` (`requete_invalide`).
 
 ## Vérification de l'origine
-Toute écriture (`POST`, `PUT`, `PATCH`, `DELETE`) dont l'en-tête `Origin` n'est pas dans `ALLOWED_ORIGINS`
+Toute écriture (`POST`, `PUT`, `PATCH`, `DELETE`) dont l'origine (en-tête `Origin`, ou à défaut `Referer`) n'est pas dans `ALLOWED_ORIGINS`
 reçoit `403 origine_refusee`. Cette page est servie par l'API (origine `http://localhost:8000`), qui n'est
 **pas** autorisée par défaut : pour essayer des écritures ici, ajoutez `http://localhost:8000` à
 `ALLOWED_ORIGINS` dans `.env` (liste séparée par des virgules) puis redémarrez l'API. Un client de
@@ -89,7 +91,7 @@ OPERATIONS: dict[tuple[str, str], tuple[str, str]] = {
     ),
     ("POST", "/api/authentification/deconnexion"): (
         "Se déconnecter",
-        "Efface le cookie. **Le JWT n'est pas révoqué** : il reste valable jusqu'à son expiration (30 min). "
+        "Efface le cookie. **Le JWT n'est pas révoqué** : il reste valable jusqu'à son expiration (30 min par défaut). "
         "Un `401` signifie que la session a déjà expiré.",
     ),
     ("GET", "/api/authentification/moi"): (
@@ -191,6 +193,47 @@ MESSAGES_EXEMPLE = {
     500: "Une erreur interne est survenue.",
 }
 
+# Messages réels renvoyés par l'API, route par route (statut -> message, champs éventuels).
+# `tests/test_openapi.py` provoque ces erreurs et compare : un exemple ne peut pas mentir.
+EXEMPLES_ERREUR: dict[tuple[str, str, int], tuple[str, dict[str, str] | None]] = {
+    ("POST", "/api/authentification/inscription", 409): (
+        "Un compte existe déjà avec cet email.", {"email": "Déjà utilisé."}),
+    ("POST", "/api/authentification/connexion", 401): ("Email ou mot de passe incorrect.", None),
+    ("POST", "/api/authentification/connexion", 429): ("Trop de tentatives, réessayez plus tard.", None),
+    ("POST", "/api/depenses", 404): ("Catégorie introuvable.", {"categorie_id": "Catégorie inconnue."}),
+    ("GET", "/api/depenses/{depense_id}", 404): ("Dépense introuvable.", None),
+    ("PATCH", "/api/depenses/{depense_id}", 404): ("Dépense introuvable.", None),
+    ("DELETE", "/api/depenses/{depense_id}", 404): ("Dépense introuvable.", None),
+    ("POST", "/api/budgets", 404): ("La catégorie demandée est introuvable.", None),
+    ("POST", "/api/budgets", 409): ("Un budget existe déjà pour cette catégorie et ce mois.", None),
+    ("GET", "/api/budgets/{budget_id}", 404): ("Budget introuvable.", None),
+    ("PATCH", "/api/budgets/{budget_id}", 404): ("Budget introuvable.", None),
+    ("DELETE", "/api/budgets/{budget_id}", 404): ("Budget introuvable.", None),
+}
+
+# Champ fautif donné en exemple pour la 422 de chaque route (statut 422 -> champs).
+EXEMPLES_422: dict[tuple[str, str], dict[str, str]] = {
+    ("POST", "/api/authentification/inscription"): {"email": "Valeur invalide."},
+    ("POST", "/api/authentification/connexion"): {"email": "Valeur invalide."},
+    ("POST", "/api/depenses"): {"montant": "Valeur trop petite."},
+    ("GET", "/api/depenses"): {"limite": "Valeur trop grande."},
+    ("GET", "/api/depenses/{depense_id}"): {"depense_id": "Valeur invalide."},
+    ("PATCH", "/api/depenses/{depense_id}"): {"montant": "Valeur trop petite."},
+    ("DELETE", "/api/depenses/{depense_id}"): {"depense_id": "Valeur invalide."},
+    ("GET", "/api/budgets"): {"mois": "Valeur invalide."},
+    ("POST", "/api/budgets"): {"montant_limite": "Valeur trop petite."},
+    ("GET", "/api/budgets/{budget_id}"): {"budget_id": "Valeur invalide."},
+    ("PATCH", "/api/budgets/{budget_id}"): {"seuil_alerte_pct": "Valeur trop grande."},
+    ("DELETE", "/api/budgets/{budget_id}"): {"budget_id": "Valeur invalide."},
+}
+
+DESCRIPTIONS_SUCCES = {
+    "200": "Succès.",
+    "201": "Ressource créée.",
+    "204": "Succès, sans contenu.",
+    "503": "Base de données injoignable (`statut` valant `degrade`).",
+}
+
 PARAMETRES = {
     "mois": "Mois au format `AAAA-MM` (par exemple `2026-10`).",
     "categorie_id": "Identifiant (UUID) d'une catégorie.",
@@ -209,10 +252,18 @@ def _exige_connexion(dependant: Dependant) -> bool:
     return any(d.call is utilisateur_courant or _exige_connexion(d) for d in dependant.dependencies)
 
 
-def _reponse_erreur(statut: int, description: str) -> dict[str, Any]:
-    exemple: dict[str, Any] = {"code": CODES_PAR_STATUT[statut], "message": MESSAGES_EXEMPLE[statut]}
-    if statut == 422:
-        exemple["champs"] = {"montant": "Valeur trop petite."}
+def _reponse_erreur(
+    statut: int,
+    description: str,
+    message: str | None = None,
+    champs: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    exemple: dict[str, Any] = {
+        "code": CODES_PAR_STATUT[statut],
+        "message": message or MESSAGES_EXEMPLE[statut],
+    }
+    if champs:
+        exemple["champs"] = champs
     return {
         "description": description,
         "content": {
@@ -243,9 +294,13 @@ def _documenter_operation(operation: dict[str, Any], route: APIRoute, methode: s
     if route.body_field is not None:
         reponses["400"] = _reponse_erreur(400, DESCRIPTIONS_ERREUR[400])
     if "422" in reponses:
-        reponses["422"] = _reponse_erreur(422, DESCRIPTIONS_ERREUR[422])
+        reponses["422"] = _reponse_erreur(422, DESCRIPTIONS_ERREUR[422], champs=EXEMPLES_422.get(cle))
     for statut, description in ERREURS_METIER.get(cle, {}).items():
-        reponses[str(statut)] = _reponse_erreur(statut, description)
+        message, champs = EXEMPLES_ERREUR.get((methode, route.path, statut), (None, None))
+        reponses[str(statut)] = _reponse_erreur(statut, description, message, champs)
+    for statut, texte in DESCRIPTIONS_SUCCES.items():
+        if statut in reponses and not statut.startswith("4"):
+            reponses[statut]["description"] = texte
     reponses["500"] = _reponse_erreur(500, DESCRIPTIONS_ERREUR[500])
     operation["responses"] = dict(sorted(reponses.items()))
 
@@ -296,7 +351,7 @@ def construire_openapi(app: FastAPI) -> dict[str, Any]:
             "type": "apiKey",
             "in": "cookie",
             "name": NOM_COOKIE_JWT,
-            "description": "JWT posé par `POST /api/authentification/connexion` (HttpOnly, 30 min, non révocable).",
+            "description": "JWT posé par `POST /api/authentification/connexion` (HttpOnly, 30 min par défaut, non révocable).",
         }
     }
 
