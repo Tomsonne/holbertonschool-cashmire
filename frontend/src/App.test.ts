@@ -1,6 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import App from './App.svelte';
+import { aller } from './lib/navigation';
+import { session } from './lib/session.svelte';
+
+// jsdom n'implémente pas la navigation : la redirection est observée sur ce mock.
+vi.mock('./lib/navigation', () => ({ aller: vi.fn() }));
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState({}, '', '/'); });
 
@@ -95,5 +100,82 @@ describe('Cashmire health screen', () => {
     vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
     render(App);
     expect(screen.getByRole('status')).toHaveTextContent('Chargement de votre session…');
+  });
+});
+
+describe('Pages de connexion et d’inscription', () => {
+  const json = (valeur: unknown, status = 200) => new Response(JSON.stringify(valeur), { status });
+  const alice = { id: 'u-1', email: 'alice@example.test', nom_affichage: 'Alice' };
+
+  // Le store de session est partagé par tout le fichier : chaque test repart d'un visiteur.
+  beforeEach(() => {
+    vi.mocked(aller).mockClear();
+    session.utilisateur = null;
+    session.etat = 'chargement';
+    session.message = '';
+  });
+
+  async function remplirConnexion() {
+    await fireEvent.input(screen.getByLabelText('Adresse e-mail'), { target: { value: 'alice@example.test' } });
+    await fireEvent.input(screen.getByLabelText('Mot de passe'), { target: { value: 'mot-de-passe' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
+  }
+
+  it('connecte sur /connexion sans appeler /moi puis redirige vers les budgets', async () => {
+    window.history.replaceState({}, '', '/connexion');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(alice));
+    render(App);
+    expect(screen.getByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Créer un compte' })).toHaveAttribute('href', '/inscription');
+    expect(fetchMock).not.toHaveBeenCalled();
+    await remplirConnexion();
+    await waitFor(() => expect(aller).toHaveBeenCalledWith('/budgets'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/authentification/connexion', expect.objectContaining({ method: 'POST', credentials: 'include' }));
+  });
+
+  it('garde le formulaire de /connexion après un 401 sans rediriger', async () => {
+    window.history.replaceState({}, '', '/connexion');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ erreur: { code: 'identifiants_invalides', message: 'Identifiants invalides.' } }, 401));
+    render(App);
+    await remplirConnexion();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Identifiants invalides.');
+    expect(screen.getByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
+    expect(aller).not.toHaveBeenCalled();
+  });
+
+  it('affiche l’inscription sans appeler /moi et annonce la création du compte', async () => {
+    window.history.replaceState({}, '', '/inscription');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ ...alice, date_creation: '2026-10-08T10:00:00Z' }, 201));
+    render(App);
+    expect(screen.getByRole('heading', { name: 'Créer un compte' })).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    await fireEvent.input(screen.getByLabelText('Adresse e-mail'), { target: { value: 'alice@example.test' } });
+    await fireEvent.input(screen.getByLabelText('Mot de passe'), { target: { value: 'mot-de-passe-solide' } });
+    await fireEvent.input(screen.getByLabelText('Nom d’affichage'), { target: { value: 'Alice' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Compte créé. Vous pouvez maintenant vous connecter.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/authentification/inscription', expect.objectContaining({ method: 'POST' }));
+    expect(aller).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [429, { code: 'trop_de_tentatives', message: 'Trop de tentatives, réessayez plus tard.' }, 'Trop de tentatives, réessayez plus tard.'],
+    [500, { code: 'erreur_interne', message: 'Erreur interne du serveur.' }, 'Impossible de joindre le service. Réessayez.'],
+  ])('garde le formulaire d’une page privée après un %i à la connexion', async (status, erreur, attendu) => {
+    window.history.replaceState({}, '', '/budgets');
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ erreur: { code: 'non_authentifie', message: 'Authentification requise.' } }, 401))
+      .mockResolvedValueOnce(json({ erreur }, status));
+    render(App);
+    await screen.findByRole('heading', { name: 'Accéder à mes budgets' });
+    await remplirConnexion();
+    expect(await screen.findByRole('alert')).toHaveTextContent(attendu);
+    expect(screen.queryByRole('heading', { name: 'Service indisponible' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Accéder à mes budgets' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Adresse e-mail')).toHaveValue('alice@example.test');
+    expect(screen.getByRole('button', { name: 'Se connecter' })).toBeEnabled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
