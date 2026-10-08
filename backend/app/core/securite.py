@@ -13,6 +13,12 @@ _hasher = PasswordHasher()
 # Nom du cookie portant le JWT (choix d'équipe, absent du contrat) : réutilisé par #9 et #10.
 NOM_COOKIE_JWT = "access_token"
 
+# Marge accordée à l'horloge lors de la lecture d'un jeton. L'`iat` d'un jeton est posé à sa création :
+# si l'horloge recule ensuite de quelques fractions de seconde (resynchronisation NTP, machine
+# virtuelle, deux serveurs légèrement décalés), il paraîtrait « dans le futur » et un jeton valide
+# serait refusé. Sans cette marge, une 401 apparaît au hasard juste après une connexion réussie.
+TOLERANCE_HORLOGE_SECONDES = 10
+
 
 def attributs_cookie_jwt() -> dict[str, Any]:
     """Emplacement et sécurité du cookie JWT, communs à la connexion et à la déconnexion.
@@ -54,6 +60,7 @@ def decoder_jwt(jeton: str) -> uuid.UUID | None:
             settings.jwt_secret,
             algorithms=["HS256"],
             options={"require": ["exp", "sub"]},
+            leeway=TOLERANCE_HORLOGE_SECONDES,
         )
         # Converti en UUID avant toute requête SQL ; un sub qui n'en est pas un donne None.
         return uuid.UUID(claims["sub"])
