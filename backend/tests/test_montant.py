@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from app.core.gestionnaires import installer_gestionnaires
-from app.schemas.montant import Montant, MontantPositif
+from app.schemas.montant import Montant, MontantCalcule, MontantPositif
 
 
 class Depense(BaseModel):
@@ -176,3 +176,35 @@ def test_le_motif_publie_dans_l_openapi_correspond_exactement_a_la_validation():
         assert accepte == bool(motif.fullmatch(valeur)), (
             f"{valeur!r} : validation={accepte}, motif publié={bool(motif.fullmatch(valeur))}"
         )
+
+
+# --- Montant calculé : une somme n'est pas bornée à 10 chiffres ----------------------------------
+
+
+class Somme(BaseModel):
+    total: MontantCalcule
+
+
+@pytest.mark.parametrize(
+    ("valeur", "attendu"),
+    [
+        (Decimal("19999999999.98"), "19999999999.98"),
+        ("123456789012.50", "123456789012.50"),
+        ("-19999999899.98", "-19999999899.98"),
+        (Decimal("0.1"), "0.10"),
+    ],
+)
+def test_un_montant_calcule_n_est_pas_borne_a_dix_chiffres(valeur, attendu):
+    assert Somme(total=valeur).model_dump(mode="json") == {"total": attendu}
+
+
+@pytest.mark.parametrize("valeur", [12.5, 12, True, None, "1e2", "+5", " 1.00", "12.345", "abc", ""])
+def test_un_montant_calcule_refuse_les_ecritures_non_decimales(valeur):
+    with pytest.raises(ValidationError):
+        Somme(total=valeur)
+
+
+def test_un_montant_saisi_reste_borne_alors_qu_un_montant_calcule_ne_l_est_pas():
+    with pytest.raises(ValidationError):
+        TypeAdapter(MontantPositif).validate_python("10000000000")
+    assert Somme(total="10000000000.00").total == Decimal("10000000000.00")

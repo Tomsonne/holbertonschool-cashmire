@@ -133,6 +133,8 @@ Précisions :
 
 `statut` ∈ `ok | attention | depasse` (règle de calcul dans `data-model.md`).
 
+`depense` et `reste` sont des **sommes calculées** : contrairement à un montant saisi (10 chiffres au plus avant la virgule), elles ne sont pas bornées en taille, car la somme de plusieurs dépenses valides peut dépasser 9 999 999 999,99. Elles restent des chaînes à exactement 2 décimales.
+
 ## Exemple de réponse budget
 ```json
 {
@@ -179,7 +181,6 @@ La vérification est une dépendance globale de l'application (`app/core/origine
 - Le JWT **n'est pas révocable** avant son expiration (30 minutes par défaut).
 - **Énumération des comptes :** `POST /inscription` répond `409` pour un email déjà inscrit (avec `champs.email`), donc révèle son existence, alors que la connexion renvoie le même `401` dans les deux cas. Compromis assumé du MVP.
 - **Secret d'exemple :** l'application accepte le `JWT_SECRET` public de `.env.example` même avec `ENVIRONMENT=production` ; un jeton forgé avec ce secret est accepté. À remplacer avant tout déploiement (garde-fou prévu avec #30).
-- **Consommation de budget très élevée :** une somme de dépenses supérieure à 9 999 999 999,99 provoque une `500` à la lecture du budget (la borne des montants s'applique aussi aux sommes calculées). Bug connu.
 - La protection CSRF par vérification de l'origine est **traitée dans #11** (voir « Vérification de l'origine »), en plus de `SameSite=Lax`.
 - Sans `Origin`, la décision repose sur `Referer` (repli) : un client qui n'envoie aucun des deux est refusé.
 - Le comportement derrière un reverse proxy (réécriture de `Origin` ou de `Referer`, origine publique différente) **n'est pas traité**.

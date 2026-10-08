@@ -110,7 +110,7 @@ Pour un budget `(utilisateur, catégorie, mois)` :
   - `attention` si `seuil_alerte_pct <= pourcentage <= 100`
   - `depasse` si `depense > montant_limite`
 
-Le calcul est fait en `Decimal` côté API (jamais en `float`).
+Le calcul est fait en `Decimal` côté API (jamais en `float`). `depense` et `reste` sont des sommes : elles ne sont pas limitées à 10 chiffres comme un montant saisi, car `NUMERIC(12,2)` ne borne que chaque ligne de la table.
 
 ## Index
 - `depenses (utilisateur_id, date_depense)` : liste par mois.

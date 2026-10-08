@@ -108,7 +108,6 @@ En local hors Docker (Python 3.12 et Node 22), démarrez PostgreSQL et réglez `
 - **Illustrations du frontend :** environ 12 Mo de PNG (`frontend/public/assets/cashmire`) ; une conversion en WebP et un redimensionnement sont prévus (éco-conception).
 - **Valeurs d’exemple :** l’application ne rejette pas encore le `JWT_SECRET` d’exemple en production ; quiconque le connaît (il est public) peut fabriquer un jeton valide et ouvrir la session de n’importe quel utilisateur (vérifié). Voir « Avant un déploiement ».
 - **Énumération des comptes :** l’inscription répond `409` « Un compte existe déjà avec cet email. » : elle révèle qu’un email est inscrit, contrairement à la connexion, qui répond le même `401` dans les deux cas. Compromis assumé du MVP (le masquer demanderait une vérification par email).
-- **Consommation de budget très élevée :** si la somme des dépenses d’un budget dépasse 9 999 999 999,99 €, la réponse échoue en `500` (la limite de 10 chiffres s’applique aussi aux sommes calculées) ; le budget est quand même créé, puis la liste des budgets de ce mois répond `500`. Bug connu, à corriger.
 - **Catégories :** six catégories prédéfinies, communes et en lecture seule ; les catégories personnelles sont une extension possible après le MVP.
 - **Synthèse mensuelle :** calculée dans le navigateur à partir de toutes les pages de dépenses du mois ; une route d’agrégats côté API serait plus adaptée à de gros volumes.
 
