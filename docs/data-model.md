@@ -13,14 +13,14 @@ erDiagram
 
     UTILISATEURS {
         uuid id PK
-        text email UK
-        text mot_de_passe_hache
-        text nom_affichage
+        varchar email UK "320 caractères, unique sans tenir compte de la casse"
+        varchar mot_de_passe_hache "255 caractères, hash Argon2id"
+        varchar nom_affichage "1 à 100 caractères"
         timestamptz date_creation
     }
     CATEGORIES {
         uuid id PK
-        text nom UK
+        varchar nom UK "80 caractères, unique sans tenir compte de la casse"
         timestamptz date_creation
     }
     DEPENSES {
@@ -28,7 +28,7 @@ erDiagram
         uuid utilisateur_id FK
         uuid categorie_id FK
         numeric montant "NUMERIC(12,2) > 0"
-        text libelle
+        varchar libelle "1 à 200 caractères"
         date date_depense
         timestamptz date_creation
         timestamptz date_modification
@@ -104,7 +104,7 @@ Le schéma proposé par un membre de l'équipe a été comparé à celui-ci. Dé
 Pour un budget `(utilisateur, catégorie, mois)` :
 - `depense` = somme des dépenses de l'utilisateur dans cette catégorie pour ce mois
 - `reste` = `montant_limite - depense` (peut être négatif)
-- `pourcentage` = `depense / montant_limite * 100`
+- `pourcentage` = `depense / montant_limite * 100` (arrondi à 2 décimales dans la réponse ; le **statut** utilise la valeur exacte, non arrondie : 79,996 % n'atteint pas un seuil de 80 %)
 - `statut` :
   - `ok` si `pourcentage < seuil_alerte_pct`
   - `attention` si `seuil_alerte_pct <= pourcentage <= 100`
@@ -117,10 +117,10 @@ Le calcul est fait en `Decimal` côté API (jamais en `float`).
 - `depenses (utilisateur_id, categorie_id)` : somme par catégorie.
 - L'unicité du budget crée aussi l'index `(utilisateur_id, categorie_id, periode_mois)`.
 
-## Initialisation et décisions en attente
+## Initialisation et décisions
 
 La migration initiale insère les six catégories listées ci-dessus avec des UUID stables. La commande `docker compose exec api python scripts/seed_categories.py` peut être relancée : elle vérifie les noms sans tenir compte de la casse avant toute insertion. Elle ne crée aucun compte de démonstration ni mot de passe.
 
 La durée de vie du JWT est fixée à 30 minutes par défaut et reste configurable (#37). Aucun refresh token n'est prévu. Le jeton n'est pas révocable côté serveur avant expiration ; la déconnexion efface le cookie uniquement.
 
-Le contrat définit actuellement `attention` pour un pourcentage inférieur ou égal à 100 et `depasse` seulement au-dessus de 100. Confirmer avec l'équipe si une consommation exactement égale à la limite doit plutôt être considérée comme dépassée.
+**Décision tranchée :** un budget consommé à exactement 100 % est `attention` (la limite est atteinte, pas franchie) ; `depasse` commence strictement au-dessus de la limite (`depense > montant_limite`).

@@ -14,7 +14,7 @@ FastAPI renvoie un nombre JSON (12.5) et la règle n'est plus respectée.
 from decimal import Decimal
 from typing import Annotated, Any
 
-from pydantic import BeforeValidator, Field, PlainSerializer
+from pydantic import BeforeValidator, Field, PlainSerializer, WithJsonSchema
 
 
 def _exiger_chaine(valeur: Any) -> Any:
@@ -34,13 +34,38 @@ def _vers_chaine(valeur: Decimal) -> str:
     return f"{valeur:.2f}"
 
 
+# Description OpenAPI : sans elle, Pydantic annonce « nombre ou chaîne » à l'entrée, ce qui est
+# faux (un nombre JSON est refusé). Elle ne change rien au comportement, seulement à /docs.
+_DESCRIPTION_ENTREE = (
+    "Montant en euros, **chaîne décimale** à 2 décimales au plus et 10 chiffres au plus avant "
+    "la virgule. Un nombre JSON (12.5) est refusé."
+)
+_SCHEMA_ENTREE = {
+    "type": "string",
+    "pattern": r"^\d{1,10}(\.\d{1,2})?$",
+    "examples": ["12.50"],
+    "description": _DESCRIPTION_ENTREE,
+}
+_SCHEMA_ENTREE_POSITIF = {
+    **_SCHEMA_ENTREE,
+    "description": _DESCRIPTION_ENTREE + " Strictement supérieur à 0.",
+}
+_SCHEMA_SORTIE = {
+    "type": "string",
+    "pattern": r"^-?\d{1,10}\.\d{2}$",
+    "examples": ["12.50"],
+    "description": "Montant en euros, chaîne décimale à exactement 2 décimales (jamais un nombre).",
+}
+
 # Montant quelconque (peut être négatif : par exemple le "reste" d'un budget dépassé).
 Montant = Annotated[
     Decimal,
     BeforeValidator(_exiger_chaine),
     Field(decimal_places=2, gt=-LIMITE, lt=LIMITE),
     PlainSerializer(_vers_chaine, return_type=str, when_used="json"),
+    WithJsonSchema(_SCHEMA_ENTREE, mode="validation"),
+    WithJsonSchema(_SCHEMA_SORTIE, mode="serialization"),
 ]
 
 # Montant strictement positif : montant d'une dépense, limite d'un budget.
-MontantPositif = Annotated[Montant, Field(gt=0)]
+MontantPositif = Annotated[Montant, Field(gt=0), WithJsonSchema(_SCHEMA_ENTREE_POSITIF, mode="validation")]

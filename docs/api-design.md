@@ -6,6 +6,7 @@ Les montants sont des **chaînes décimales** (`"12.50"`) pour éviter toute per
 - **en entrée**, une chaîne avec 2 décimales au plus et 10 chiffres au plus avant la virgule (comme `NUMERIC(12,2)`) ; un nombre JSON (`12.5`), une valeur à 3 décimales (`"12.345"`) ou trop grande est refusé en `422` au lieu d'être arrondi ou de faire échouer l'insertion en base ;
 - dans le code, les schémas utilisent `Montant` (négatif possible, par exemple un `reste`) ou `MontantPositif` (`app/schemas/montant.py`).
 Seule exception de langue : `/api/health`, nom conventionnel des routes de supervision.
+La documentation interactive (OpenAPI) est servie sur `/docs` et `/openapi.json` ; les tests (`backend/tests/test_openapi.py`) vérifient que ce document, l'OpenAPI et le code décrivent exactement les mêmes routes et les mêmes codes d'erreur.
 
 ## Format d'erreur unique
 ```json
@@ -159,6 +160,8 @@ Toute requête `POST`, `PUT`, `PATCH` ou `DELETE` vers une route existante est c
 - Sans `Origin` ni `Referer`, la requête est refusée.
 
 Refus : `403 {"erreur": {"code": "origine_refusee", "message": "Origine non autorisée."}}`, sans `champs`.
+
+Conséquence pour la documentation interactive : `/docs` est servie par l'API (origine `http://localhost:8000`), qui n'est pas dans `ALLOWED_ORIGINS` par défaut ; ses essais d'écriture reçoivent `403` tant qu'on ne l'ajoute pas (voir le README).
 
 La vérification est une dépendance globale de l'application (`app/core/origine.py`, enregistrée par `FastAPI(dependencies=[...])`) : elle s'exécute avant l'authentification, la validation du corps et la route. Une écriture d'origine refusée répond donc `403` même sans cookie ou avec des données invalides (au lieu de `401` ou `422`), et une connexion refusée n'incrémente jamais le compteur de tentatives. Exceptions : une route inconnue répond toujours `404` (la dépendance n'est pas appelée), et un corps qui n'est pas du JSON valide répond `400`, car FastAPI le décode avant d'appeler les dépendances. Aucun `CORSMiddleware` n'est installé : le front appelle `/api` par le proxy Vite, donc depuis la même origine.
 
