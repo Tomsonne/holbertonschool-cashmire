@@ -10,7 +10,7 @@ describe('Navigation', () => {
   it('montre seulement la marque et le lien de connexion à un visiteur', () => {
     render(Navigation, { utilisateur: null, chemin: '/budgets', deconnecter: vi.fn() });
     expect(screen.getByText('Cashmire')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '/budgets');
+    expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '/connexion');
     expect(screen.queryByRole('link', { name: 'Synthèse' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Budgets' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Se déconnecter' })).not.toBeInTheDocument();
@@ -26,6 +26,14 @@ describe('Navigation', () => {
     expect(screen.queryByRole('link', { name: 'Connexion' })).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
     expect(deconnecter).toHaveBeenCalledTimes(1);
+  });
+
+  it('propose la connexion et la création de compte à un visiteur', () => {
+    render(Navigation, { utilisateur: null, chemin: '/inscription', deconnecter: vi.fn() });
+    expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '/connexion');
+    expect(screen.getByRole('link', { name: 'Créer un compte' })).toHaveAttribute('href', '/inscription');
+    expect(screen.getByRole('link', { name: 'Créer un compte' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Connexion' })).not.toHaveAttribute('aria-current');
   });
 
   it.each([
