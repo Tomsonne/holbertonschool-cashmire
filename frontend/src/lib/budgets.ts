@@ -30,8 +30,8 @@ export function montantLisible(value: string): string {
 
 export function iconeCategorie(nom: string): string | null {
   const cle = nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (['alimentation', 'factures', 'loisirs', 'transport'].includes(cle)) {
-    return `/assets/cashmire/icon-${cle}.png`;
+  if (['alimentation', 'factures', 'loisirs', 'transport', 'sante', 'autre'].includes(cle)) {
+    return `/assets/cashmire/icon-${cle}.webp`;
   }
   return null;
 }
