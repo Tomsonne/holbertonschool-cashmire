@@ -105,11 +105,30 @@ En local hors Docker (Python 3.12 et Node 22), démarrez PostgreSQL et réglez `
 - **JWT non révocable :** la déconnexion efface le cookie, mais le jeton reste valable jusqu’à son expiration (30 minutes par défaut).
 - **Limiteur de connexion en mémoire :** 5 échecs en 15 minutes par email, compteur propre à chaque processus et perdu au redémarrage ; un tiers qui connaît un email peut en bloquer la connexion **jusqu’à 15 minutes**, et prolonger le blocage en espaçant ses essais (un échec dès qu’une place se libère).
 - **Origine des écritures :** le comportement derrière un reverse proxy qui réécrit `Origin` ou `Referer` n’est pas traité ; `/docs` demande d’ajouter son origine à `ALLOWED_ORIGINS` (voir plus haut).
-- **Illustrations du frontend :** environ 12 Mo de PNG (`frontend/public/assets/cashmire`) ; une conversion en WebP et un redimensionnement sont prévus (éco-conception).
+- **Illustrations du frontend :** les six icônes de catégories sont en WebP (environ 110 Ko), mais trois images PNG pèsent encore environ 2 Mo chacune (dossier `frontend/public/assets/cashmire` : environ 6,6 Mo) ; leur conversion est prévue (éco-conception, voir `docs/accessibilite-eco-conception.md`).
+- **Polices externes :** la feuille de style charge des polices depuis Google Fonts (requêtes tierces) ; à héberger en local pour une mise en production (voir `docs/privacy.md`).
+- **Métadonnées minimales :** les pages publiques ont un titre, la langue et le viewport, mais pas de description ni de balises de partage.
+- **Pas de données de démonstration automatiques :** aucun compte ni jeu de données n'est créé au démarrage ; créez un compte (page d'inscription) puis suivez le parcours de `docs/recette.md`. Un script de seed est une amélioration prévue.
+- **Gestion du compte :** pas de modification de l'e-mail, du nom ou du mot de passe, ni de suppression de compte dans l'interface (voir `docs/privacy.md`).
+- **Journaux d'erreurs :** la trace d'une erreur interne peut contenir une valeur saisie ; elle n'est jamais renvoyée au client (voir `docs/privacy.md`).
+- **Accessibilité :** pratiques en place et vérifications manuelles documentées, mais contrastes non mesurés par outil et lecteur d'écran non testé (voir `docs/accessibilite-eco-conception.md`).
 - **Secrets faibles :** seuls les secrets d’exemple publics connus sont refusés en production ; un secret court en apparence aléatoire ou faible, mais inconnu, n’est pas détecté (voir « Avant un déploiement »). Le mot de passe PostgreSQL d’exemple n’est pas contrôlé non plus.
 - **Énumération des comptes :** l’inscription répond `409` « Un compte existe déjà avec cet email. » : elle révèle qu’un email est inscrit, contrairement à la connexion, qui répond le même `401` dans les deux cas. Compromis assumé du MVP (le masquer demanderait une vérification par email).
 - **Catégories :** six catégories prédéfinies, communes et en lecture seule ; les catégories personnelles sont une extension possible après le MVP.
 - **Synthèse mensuelle :** calculée dans le navigateur à partir de toutes les pages de dépenses du mois ; une route d’agrégats côté API serait plus adaptée à de gros volumes.
+
+## Déploiement
+
+Le MVP **n'est pas déployé** : il est livré pour une exécution locale avec Docker Compose, comme le demande la livraison. Ce que nous avons vérifié, avec `ENVIRONMENT=production` et de vrais secrets, dans un environnement isolé :
+
+- démarrage à froid des quatre services depuis une base vide (migrations, API, frontend) et `GET /api/health` ;
+- cookie de session `HttpOnly; Secure; SameSite=Lax`, écritures acceptées depuis l'origine configurée et refusées depuis une autre (`403`) ;
+- refus de démarrer avec un secret d'exemple public ;
+- **sauvegarde et restauration** de la base : `docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > sauvegarde.dump`, puis `pg_restore` dans une base vierge ;
+- **retour arrière** du schéma avec `docker compose run --rm migrate alembic downgrade -1` (ou `base`), puis `docker compose run --rm migrate` pour le rejouer ;
+- conservation des données après `docker compose down` puis `up` (sans `--volumes`).
+
+**Ce qui manquerait pour une vraie mise en production :** servir un build du frontend (`npm run build`) avec un serveur statique plutôt que le serveur de développement Vite ; terminer le HTTPS (reverse proxy et certificat) ; ne publier que ce proxy ; `restart: unless-stopped` sur les services ; décider si `/docs` reste public ; héberger les polices ; sauvegardes planifiées. Ces points ne sont pas réalisés et sont listés parmi les limites.
 
 ## Arrêt et reset
 
@@ -129,4 +148,4 @@ docker compose down --volumes
 - `frontend/src/lib/api/` : appels HTTP centralisés ; `components/` : UI réutilisable ; `lib/types/` accueillera les types partagés au besoin.
 - `.github/agents/` : profils Product & Architecture, Full-Stack Development, QA & Security.
 
-Voir [architecture](docs/architecture.md), [modèle de données](docs/data-model.md), [contrat API](docs/api-design.md) et [journal agentique](docs/agentic-log.md). Lire `.github/copilot-instructions.md` avant de modifier le projet.
+Voir [architecture](docs/architecture.md), [modèle de données](docs/data-model.md), [contrat API](docs/api-design.md), [journal agentique](docs/agentic-log.md), [plan de recette](docs/recette.md), [confidentialité](docs/privacy.md) et [accessibilité et éco-conception](docs/accessibilite-eco-conception.md). Lire `.github/copilot-instructions.md` avant de modifier le projet.
