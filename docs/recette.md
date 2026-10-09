@@ -8,6 +8,7 @@ Ce document décrit comment vérifier que le MVP Cashmire fonctionne de bout en 
 - Ouvrir le frontend sur **`localhost`** et non sur `127.0.0.1` : seule l'origine `http://localhost:5173` est autorisée pour les écritures.
 - Deux comptes sont nécessaires pour les tests d'isolation (le second dans une fenêtre de navigation privée).
 - Navigateur : Chrome sur Windows (WSL2 pour Docker). Les autres navigateurs ne sont pas testés.
+- Version testée : `main` après la fusion des PR #57 à #62 ; exécution du 9 octobre 2026.
 
 **Exécution :** les scénarios sans constat chiffré ont été joués en démonstration d'équipe, dans le navigateur, avec deux comptes ; les constats chiffrés (montants, pourcentages) viennent de l'exécution du 9 octobre 2026. Les scénarios de la section 7 ont été exécutés avec l'aide d'un agent.
 La colonne « Tests automatiques » indique le fichier qui couvre la même règle ; elle ne remplace pas l'exécution manuelle.
@@ -16,13 +17,13 @@ La colonne « Tests automatiques » indique le fichier qui couvre la même règl
 
 | # | Scénario | Résultat attendu | Tests automatiques | Résultat |
 |---|---|---|---|---|
-| A1 | Créer un compte (email, mot de passe, nom) | Compte créé, accès à l'application | `test_inscription.py`, `Inscription.test.ts` | ✅ |
+| A1 | Créer un compte (email, mot de passe, nom) | Compte créé ; message invitant à se connecter (l'inscription ne connecte pas) | `test_inscription.py`, `Inscription.test.ts` | ✅ |
 | A2 | Créer un compte avec un email déjà utilisé | Message clair, sans détail technique | `test_inscription.py` | ✅ |
 | A3 | Créer un compte avec un mot de passe trop court | Message par champ, rien n'est créé | `test_inscription.py` (bornes du mot de passe) | ✅ |
 | A4 | Se connecter avec les bons identifiants | Nom affiché dans la navigation, accès aux pages privées | `test_connexion.py`, `Connexion.test.ts` | ✅ |
 | A5 | Se connecter avec un mauvais mot de passe, puis avec un email inconnu | **Même** message dans les deux cas (pas d'énumération des comptes) | `test_connexion.py` | ✅ |
-| A6 | Ouvrir une page privée (`/depenses`) sans être connecté | Redirection vers la connexion | `test_isolation.py` (401 sur toute route privée), `App.test.ts` | ✅ |
-| A7 | Se déconnecter, puis utiliser le bouton « retour » du navigateur | Retour à la connexion, pages privées inaccessibles | `test_deconnexion.py` | ✅ |
+| A6 | Ouvrir une page privée (`/depenses`) sans être connecté | Formulaire de connexion affiché à la place de la page, sans changer d'URL ; données privées masquées | `test_isolation.py` (401 sur toute route privée), `App.test.ts` | ✅ |
+| A7 | Se déconnecter, puis utiliser le bouton « retour » du navigateur | Formulaire de connexion affiché, pages privées inaccessibles (aucune donnée n'est affichée) | `test_deconnexion.py` | ✅ |
 | A8 | Recharger la page (F5) en étant connecté | La session est conservée | `session.test.ts` | ✅ |
 
 ## 2. Dépenses
@@ -66,7 +67,7 @@ La colonne « Tests automatiques » indique le fichier qui couvre la même règl
 | I1 | Se connecter avec un second compte dans une fenêtre privée | Aucune dépense ni aucun budget du premier compte | `test_isolation.py` | ✅ |
 | I2 | Accéder à la dépense ou au budget d'un autre compte par son identifiant (API) | `404`, identique à une ressource inexistante, base inchangée | `test_isolation.py` | ✅ |
 | I3 | Écriture depuis une origine non autorisée | `403` | `test_origine.py` | ✅ |
-| I4 | Cookie falsifié ou expiré | `401`, retour à la connexion | `test_isolation.py` (cookie falsifié), `test_jwt_horloge.py` (jeton expiré), `session.test.ts` | ✅ |
+| I4 | Cookie falsifié ou expiré | `401` ; formulaire de connexion affiché, données privées masquées | `test_isolation.py` (cookie falsifié), `test_jwt_horloge.py` (jeton expiré), `session.test.ts` | ✅ |
 | I5 | Démarrage en production avec le secret d'exemple | L'application refuse de démarrer, message sans recopier le secret | `test_secret_jwt.py` | ✅ (voir section 7) |
 
 ## 6. Accessibilité et responsive
@@ -90,7 +91,7 @@ Exécutées avec l'aide d'un agent, dans un projet Docker isolé (ports et base 
 | Écriture depuis l'origine autorisée / non autorisée | ✅ `201` / `403` |
 | Inscription, connexion, dépense, budget par l'API | ✅ `201`, `200`, `201`, `201` |
 | Sauvegarde (`pg_dump`) puis restauration dans une base vierge | ✅ 1 utilisateur, 1 dépense, 1 budget, 6 catégories conservés |
-| Retour arrière : `alembic downgrade base` puis `upgrade head` | ✅ |
+| Retour arrière : `alembic downgrade base` puis `upgrade head`, sur une **copie jetable** de la base (le retour à `base` supprime toutes les tables et leurs données ; `upgrade head` recrée le schéma, pas les données) | ✅ |
 | Données conservées après arrêt et relance (sans suppression du volume) | ✅ |
 | Secret d'exemple avec `ENVIRONMENT=production` | ✅ refus de démarrer |
 | Utilisateur du conteneur de l'API | ✅ non root |

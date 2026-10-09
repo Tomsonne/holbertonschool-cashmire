@@ -21,16 +21,17 @@ Les **catégories** (six, communes à tous) ne sont pas des données personnelle
 
 ## Où les données sont stockées
 
-- Dans **PostgreSQL**, dans un volume Docker local (`postgres_data`). Le MVP n'est pas déployé : aucune donnée ne quitte la machine qui lance `docker compose up`.
+- Dans **PostgreSQL**, dans un volume Docker local (`postgres_data`). Le MVP n'est pas déployé : les **données applicatives** (comptes, dépenses, budgets) restent sur la machine qui lance `docker compose up`. Seule exception : le chargement des polices provoque des requêtes du navigateur vers Google (voir « Limites connues »).
+- **En mémoire du serveur** : le limiteur de connexion garde, pendant 15 minutes, les **adresses e-mail des tentatives de connexion échouées**, **y compris celles de personnes sans compte**. Ces données ne sont pas écrites en base et sont perdues au redémarrage.
 - Dans le navigateur, un seul élément est conservé : le **cookie de session** `access_token`. Le frontend n'utilise ni `localStorage`, ni `sessionStorage`.
 
 ## Le cookie de session
 
 Un jeton signé (JWT), valable 30 minutes, transmis dans un cookie `access_token` :
 - `HttpOnly` : le JavaScript de la page ne peut pas le lire ;
-- `SameSite=Lax` : limité à l'envoi depuis d'autres sites ;
+- `SameSite=Lax` : le cookie n'est **pas envoyé lors des requêtes d'écriture** (`POST`, `PUT`, `PATCH`, `DELETE`) venues d'un autre site ; il l'est lors d'un simple clic sur un lien venant d'un autre site ;
 - `Secure` en production : envoyé uniquement en HTTPS ;
-- il contient l'identifiant de l'utilisateur et une date d'expiration, **pas** son e-mail ni son nom. Un JWT est signé mais pas chiffré : il est lisible, donc il ne porte aucune donnée sensible.
+- il contient l'identifiant de l'utilisateur (`sub`), la date d'émission (`iat`) et la date d'expiration (`exp`), **pas** son e-mail ni son nom. Un JWT est signé mais pas chiffré : il est lisible, donc il ne porte aucune donnée sensible.
 
 C'est un cookie **strictement nécessaire** au fonctionnement de la connexion : il ne sert à aucun suivi.
 
@@ -59,11 +60,13 @@ C'est un cookie **strictement nécessaire** au fonctionnement de la connexion : 
 
 ## Limites connues
 
+- **Journaux d'accès :** Uvicorn enregistre par défaut l'**adresse IP** de chaque requête dans ses journaux d'accès : c'est une donnée personnelle, à protéger comme les autres journaux (et à anonymiser ou à désactiver pour une mise en production).
 - **Journaux d'erreurs :** en cas d'erreur interne, la trace complète est écrite dans les journaux du serveur. Elle peut contenir, selon l'erreur de la base de données, une valeur saisie (par exemple un e-mail). Les journaux ne sont jamais renvoyés au client ; en contrepartie, ils doivent être protégés comme les données. Une réduction de ce contenu est prévue.
 - **Polices Google :** la feuille de style charge les polices depuis `fonts.googleapis.com`. Le navigateur de l'utilisateur contacte donc ce service tiers à chaque chargement, ce qui lui transmet son adresse IP. Une vraie mise en production devra héberger les polices elles-mêmes (voir `docs/accessibilite-eco-conception.md`).
 - **Durée de conservation :** aucune suppression automatique n'est prévue ; les données restent tant que le volume existe.
-- **Sauvegardes :** non chiffrées (le MVP n'a pas de procédure de sauvegarde automatisée) ; la procédure manuelle est décrite dans le README.
-- **Session :** un jeton volé reste valable jusqu'à son expiration (30 minutes) ; il n'est pas révocable côté serveur.
+- **Sauvegardes :** pas de procédure automatisée ; la procédure manuelle décrite dans le README produit des sauvegardes **non chiffrées**.
+- **Session :** la déconnexion **efface le cookie du navigateur mais n'invalide pas le jeton** : un jeton volé reste valable jusqu'à son expiration (30 minutes), car il n'est pas révocable côté serveur.
+- **Limiteur de connexion :** il est en mémoire, donc **propre à chaque processus** : avec plusieurs workers, la limite de 5 échecs est multipliée par le nombre de processus (le MVP en lance un seul).
 - **Aucun consentement n'est demandé**, car il n'y a ni traceur ni cookie facultatif. Si une mesure d'audience était ajoutée, il faudrait un bandeau et un choix.
 
 ## Informations légales (MVP fictif)
