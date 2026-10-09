@@ -8,7 +8,7 @@ Ce document dit ce qui est en place dans le MVP, comment cela a été vérifié 
 | Pratique | Constat |
 |---|---|
 | **Langue de la page** | `<html lang="fr">` |
-| **Structure** | Un élément `<main>` par écran, une navigation `<nav aria-label="Pages disponibles">`, des titres hiérarchisés |
+| **Structure** | Une navigation `<nav aria-label="Pages disponibles">` et des titres hiérarchisés. Les écrans d'accès (connexion, inscription), l'aperçu technique et la page introuvable ont un `<main>` ; **les pages privées connectées (Budgets, Dépenses, Synthèse) n'en ont pas** (voir les limites) |
 | **Formulaires** | Chaque champ a un `<label>` ; types adaptés (`email`, `password`, `month`) ; limites de longueur du mot de passe exprimées par `minlength` et `maxlength` |
 | **Messages d'erreur et d'état** | Erreurs affichées près du champ, avec des attributs `aria-*` (`aria-invalid`, rôles `status` ou `alert` pour les retours) ; la saisie est conservée après une erreur |
 | **Focus visible** | Contour de 3 px sur `:focus-visible` pour les boutons et champs, défini dans la navigation, l'écran d'accès et la synthèse |
@@ -25,6 +25,7 @@ Ce document dit ce qui est en place dans le MVP, comment cela a été vérifié 
 Voir `docs/recette.md`, section 6 : navigation au clavier, largeur de smartphone simulée (~375 px) dans les outils de développement, message d'erreur associé au champ, lisibilité du texte et des badges.
 
 ### Ce qui reste à faire (limites assumées)
+- **Repère `<main>` des pages privées :** Budgets, Dépenses et Synthèse sont composées de sections sans élément `<main>` englobant ; un utilisateur de lecteur d'écran n'a donc pas de repère « contenu principal » sur ces pages. Correction prévue dans une PR de code séparée.
 - **Contrastes** : lus à l'œil, **non mesurés** avec un outil ; le texte est posé sur un fond illustré, ce qui mérite un contrôle chiffré (rapport de contraste WCAG AA).
 - **Lecteur d'écran** : non testé (ni NVDA, ni VoiceOver).
 - **Mouvement réduit** : aucune règle `prefers-reduced-motion`.
